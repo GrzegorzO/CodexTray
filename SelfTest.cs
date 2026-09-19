@@ -36,6 +36,11 @@ internal static class SelfTest
             Assert(TrayIconRenderer.ColorFor(6).R == 225, "red lower bound");
             Assert(TrayIconRenderer.ColorFor(5) == Color.FromArgb(168, 85, 247), "purple threshold");
             Assert(TrayIconRenderer.ColorFor(0) == Color.FromArgb(168, 85, 247), "purple lower bound");
+            Assert(WidgetSettings.ParseDisplayStyle("Neon") == DisplayStyle.Neon, "named Neon style setting");
+            Assert(WidgetSettings.ParseDisplayStyle(5) == DisplayStyle.Neon, "legacy Neon style setting");
+            Assert(WidgetSettings.ParseDisplayStyle("Carbon") == DisplayStyle.Carbon, "named Carbon style setting");
+            Assert(WidgetSettings.ParseDisplayStyle(8) == DisplayStyle.Carbon, "legacy Carbon style setting");
+            Assert(WidgetSettings.ParseDisplayStyle("unknown") == DisplayStyle.Classic, "invalid style setting fallback");
             using var icon = TrayIconRenderer.Render(snapshot);
             Assert(icon.Width > 0 && icon.Height > 0, "battery icon rendering");
             Assert(TaskbarWidgetForm.IsShellProcessName("StartMenuExperienceHost"), "Start menu shell surface");

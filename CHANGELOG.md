@@ -11,6 +11,8 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Persist display styles by stable names while continuing to load legacy numeric
+  settings, preventing styles such as Neon from reopening as Carbon
 - Tie each widget's visibility to its taskbar, including auto-hide and taskbars
   covered by browser, game, or other fullscreen windows
 - Keep the widget visible while Start, Search, and other taskbar shell flyouts are open

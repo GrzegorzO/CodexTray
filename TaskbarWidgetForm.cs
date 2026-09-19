@@ -7,17 +7,17 @@ namespace CodexTray;
 
 internal enum DisplayStyle
 {
-    Classic,
-    Futuristic,
-    Fluent,
-    Minimal,
-    HighContrast,
-    Neon,
-    Glass,
-    Pixel,
-    Carbon,
-    Dots,
-    Pencil
+    Classic = 0,
+    Futuristic = 1,
+    Fluent = 2,
+    Minimal = 3,
+    HighContrast = 4,
+    Neon = 5,
+    Glass = 6,
+    Pixel = 7,
+    Carbon = 8,
+    Dots = 9,
+    Pencil = 10
 }
 
 internal enum LabelContentMode
@@ -1218,15 +1218,30 @@ internal static class WidgetSettings
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
-            return key?.GetValue("DisplayStyle") is int value && Enum.IsDefined((DisplayStyle)value)
-                ? (DisplayStyle)value
-                : DisplayStyle.Classic;
+            return ParseDisplayStyle(key?.GetValue("DisplayStyle"));
         }
         set
         {
             using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
-            key.SetValue("DisplayStyle", (int)value, RegistryValueKind.DWord);
+            key.SetValue("DisplayStyle", value.ToString(), RegistryValueKind.String);
         }
+    }
+
+    internal static DisplayStyle ParseDisplayStyle(object? value)
+    {
+        if (value is string name &&
+            Enum.TryParse<DisplayStyle>(name, ignoreCase: true, out var namedStyle) &&
+            Enum.IsDefined(namedStyle))
+        {
+            return namedStyle;
+        }
+
+        if (value is int legacyValue && Enum.IsDefined((DisplayStyle)legacyValue))
+        {
+            return (DisplayStyle)legacyValue;
+        }
+
+        return DisplayStyle.Classic;
     }
 
     public static bool ShowLabels

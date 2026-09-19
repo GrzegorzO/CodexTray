@@ -46,7 +46,7 @@ internal static class Program
         }
 
         var startedByWindows = args.Contains("--startup", StringComparer.OrdinalIgnoreCase);
-        AppLog.Write($"Launch requested (startup={startedByWindows}).");
+        AppLog.Write($"Launch requested (startup={startedByWindows}, style={WidgetSettings.SelectedStyle}).");
 
         try
         {
