@@ -33,6 +33,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _customPlacementItem;
     private readonly List<TaskbarWidgetForm> _widgets = [];
     private readonly System.Windows.Forms.Timer _timer;
+    private readonly System.Windows.Forms.Timer _visibilityTimer;
     private readonly ContextMenuStrip _menu;
     private readonly SynchronizationContext _uiContext;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -262,6 +263,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _timer.Tick += async (_, _) => await RefreshAsync(showErrors: false);
         _timer.Start();
 
+        // Taskbar auto-hide and fullscreen z-order changes do not reliably raise a
+        // foreground or top-level location event. Polling this inexpensive Win32
+        // state keeps each widget's visibility connected to its taskbar.
+        _visibilityTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility(restoreZOrder: false);
+        _visibilityTimer.Start();
+
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         _ = RefreshAsync(showErrors: false);
     }
@@ -434,12 +442,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateWidgetVisibility();
     }
 
-    private void UpdateWidgetVisibility()
+    private void UpdateWidgetVisibility(bool restoreZOrder = true)
     {
         foreach (var widget in _widgets)
         {
-            var shouldShow = _widgetItem.Checked &&
-                             !ForegroundWindowMonitor.IsFullscreenOn(widget.ScreenBounds);
+            var shouldShow = _widgetItem.Checked && widget.IsTaskbarVisible();
             if (!shouldShow)
             {
                 widget.Hide();
@@ -452,7 +459,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 widget.Show();
             }
 
-            widget.RestoreTaskbarZOrder();
+            if (restoreZOrder)
+            {
+                widget.RestoreTaskbarZOrder();
+            }
         }
     }
 
@@ -500,6 +510,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void Exit(object? sender, EventArgs eventArgs)
     {
         _timer.Stop();
+        _visibilityTimer.Stop();
         _shutdown.Cancel();
         _foregroundWindowMonitor.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;

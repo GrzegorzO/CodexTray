@@ -42,8 +42,9 @@ its XAML taskbar. Each widget is therefore a borderless, non-activating Win32
 window owned by the matching Explorer taskbar and kept in the documented topmost
 z-order band. Monitor-specific offsets are stored in the current user's registry.
 
-This design intentionally avoids DLL injection, Explorer patching, and continuous
-z-order polling. Out-of-context foreground and window-location accessibility event
-hooks restore z-order after transient overlays and hide each monitor's widget while
-a foreground window covers that monitor, including browser F11 fullscreen. The hooks
-do not inject code into other processes or repaint unchanged usage values.
+This design intentionally avoids DLL injection and Explorer patching. Out-of-context
+foreground and window-location accessibility event hooks restore z-order after
+transient overlays. A lightweight visibility check hit-tests each taskbar's actual
+z-order presence, keeping its widget hidden whenever that taskbar is auto-hidden or
+covered by any fullscreen application. Windows shell surfaces such as Start and
+Search are recognized separately because they leave the taskbar visible.

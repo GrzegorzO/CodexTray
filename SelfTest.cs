@@ -35,15 +35,9 @@ internal static class SelfTest
             Assert(TrayIconRenderer.ColorFor(25).R == 225, "red threshold");
             using var icon = TrayIconRenderer.Render(snapshot);
             Assert(icon.Width > 0 && icon.Height > 0, "battery icon rendering");
-
-            var screen = new Rectangle(0, 0, 1920, 1080);
-            Assert(ForegroundWindowMonitor.CoversScreen(screen, screen), "fullscreen exact bounds");
-            Assert(ForegroundWindowMonitor.CoversScreen(new Rectangle(-1, -1, 1922, 1082), screen), "fullscreen oversized bounds");
-            Assert(ForegroundWindowMonitor.CoversScreen(new Rectangle(0, 0, 1920, 1079), screen), "fullscreen rounding tolerance");
-            Assert(!ForegroundWindowMonitor.CoversScreen(new Rectangle(0, 0, 1920, 1040), screen), "maximized work area");
-            Assert(!ForegroundWindowMonitor.CoversScreen(new Rectangle(0, 0, 960, 1080), screen), "snapped window");
-            var secondaryScreen = new Rectangle(1920, 0, 1920, 1080);
-            Assert(!ForegroundWindowMonitor.CoversScreen(screen, secondaryScreen), "fullscreen is monitor-specific");
+            Assert(TaskbarWidgetForm.IsShellProcessName("StartMenuExperienceHost"), "Start menu shell surface");
+            Assert(TaskbarWidgetForm.IsShellProcessName("SearchHost"), "Search shell surface");
+            Assert(!TaskbarWidgetForm.IsShellProcessName("chrome"), "non-shell fullscreen surface");
 
             var now = DateTimeOffset.UnixEpoch;
             Assert(TaskbarWidgetForm.FormatResetLabel(new UsageWindow(0, null, now.AddDays(2).AddHours(3)), now) == "2d", "reset label days");

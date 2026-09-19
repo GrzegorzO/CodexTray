@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
@@ -76,8 +77,6 @@ internal sealed class TaskbarWidgetForm : Form
     public event EventHandler? PlacementCustomized;
 
     public string ScreenDeviceName => _targetScreen.DeviceName;
-    public Rectangle ScreenBounds => _targetScreen.Bounds;
-
     public TaskbarWidgetForm(ContextMenuStrip menu, Screen targetScreen)
     {
         _targetScreen = targetScreen;
@@ -249,6 +248,79 @@ internal sealed class TaskbarWidgetForm : Form
             0,
             SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoRedraw | SwpShowWindow);
     }
+
+    public bool IsTaskbarVisible()
+    {
+        if (!TryGetTaskbar(_targetScreen, out var taskbarHandle, out var taskbar) ||
+            !IsWindowVisible(taskbarHandle))
+        {
+            return false;
+        }
+
+        var visibleTaskbar = Rectangle.Intersect(taskbar, _targetScreen.Bounds);
+        var isHorizontal = taskbar.Width >= taskbar.Height;
+        var visibleThickness = isHorizontal ? visibleTaskbar.Height : visibleTaskbar.Width;
+        var taskbarThickness = isHorizontal ? taskbar.Height : taskbar.Width;
+        if (visibleThickness < Math.Min(taskbarThickness, ScaleLogical(16)))
+        {
+            return false;
+        }
+
+        // Fullscreen windows can cover a taskbar that Windows still reports as
+        // visible. Sample several points so our widget cannot skew one hit test.
+        ReadOnlySpan<int> sampleTenths = [1, 3, 5, 7, 9];
+        foreach (var tenth in sampleTenths)
+        {
+            var point = isHorizontal
+                ? new NativePoint(
+                    visibleTaskbar.Left + visibleTaskbar.Width * tenth / 10,
+                    visibleTaskbar.Top + visibleTaskbar.Height / 2)
+                : new NativePoint(
+                    visibleTaskbar.Left + visibleTaskbar.Width / 2,
+                    visibleTaskbar.Top + visibleTaskbar.Height * tenth / 10);
+            var windowAtPoint = WindowFromPoint(point);
+            if (windowAtPoint == taskbarHandle ||
+                GetAncestor(windowAtPoint, GaRoot) == taskbarHandle ||
+                IsChild(taskbarHandle, windowAtPoint) ||
+                IsWindowsShellSurface(windowAtPoint))
+            {
+                return true;
+            }
+        }
+
+        // Start, Search, and other Windows shell flyouts can own a transparent
+        // fullscreen surface while leaving the taskbar visible underneath.
+        return IsWindowsShellSurface(GetForegroundWindow());
+    }
+
+    private static bool IsWindowsShellSurface(IntPtr window)
+    {
+        if (window == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        _ = GetWindowThreadProcessId(window, out var processId);
+        try
+        {
+            using var process = Process.GetProcessById(checked((int)processId));
+            return IsShellProcessName(process.ProcessName);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsShellProcessName(string processName) => processName is
+        "explorer" or
+        "MicrosoftStartFeedProvider" or
+        "SearchApp" or
+        "SearchHost" or
+        "ShellExperienceHost" or
+        "ShellHost" or
+        "StartMenuExperienceHost" or
+        "TextInputHost";
 
     private void SetTaskbarOwner(IntPtr taskbarHandle)
     {
@@ -1022,6 +1094,26 @@ internal sealed class TaskbarWidgetForm : Form
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr handle, out NativeRectangle rectangle);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(NativePoint point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr handle, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsChild(IntPtr parentHandle, IntPtr handle);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong32(IntPtr handle, int index);
 
@@ -1050,6 +1142,7 @@ internal sealed class TaskbarWidgetForm : Form
     private const uint SwpNoRedraw = 0x0008;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpShowWindow = 0x0040;
+    private const uint GaRoot = 2;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRectangle
@@ -1058,6 +1151,13 @@ internal sealed class TaskbarWidgetForm : Form
         public int Top;
         public int Right;
         public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct NativePoint(int x, int y)
+    {
+        public readonly int X = x;
+        public readonly int Y = y;
     }
 }
 

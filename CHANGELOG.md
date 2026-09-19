@@ -7,7 +7,9 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
-- Hide taskbar widgets on monitors occupied by a foreground fullscreen window
+- Tie each widget's visibility to its taskbar, including auto-hide and taskbars
+  covered by browser, game, or other fullscreen windows
+- Keep the widget visible while Start, Search, and other taskbar shell flyouts are open
 
 ## [0.1.0] - 2026-09-06
 
