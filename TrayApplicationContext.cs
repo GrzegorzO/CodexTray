@@ -267,7 +267,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // foreground or top-level location event. Polling this inexpensive Win32
         // state keeps each widget's visibility connected to its taskbar.
         _visibilityTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility(restoreZOrder: false);
+        _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility();
         _visibilityTimer.Start();
 
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
