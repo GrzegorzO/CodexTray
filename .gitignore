@@ -1,0 +1,10 @@
+bin/
+obj/
+
+# Keep the convenient published executable in dist/ out of source control.
+dist/
+publish/
+*.user
+*.suo
+.vs/
+.vscode/

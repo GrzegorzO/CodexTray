@@ -1,0 +1,36 @@
+name: Bug report
+description: Report incorrect behavior or a regression
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2, build 26100.x
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: CodexTray version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Display configuration
+      placeholder: Two monitors, 100% and 150% scaling
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: Include relevant startup.log lines if useful. Do not include credentials, tokens, or private account data.

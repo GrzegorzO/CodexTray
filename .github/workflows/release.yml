@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - run: dotnet restore --runtime win-x64
+      - run: dotnet build --configuration Release --no-restore
+      - run: dotnet run --configuration Release --no-build -- --self-test
+      - name: Publish win-x64
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          dotnet publish --configuration Release --runtime win-x64 `
+            --self-contained true -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$version `
+            --no-restore --output .\publish
+          Copy-Item .\LICENSE, .\README.md .\publish
+      - name: Create archive
+        shell: pwsh
+        run: |
+          Compress-Archive -Path .\publish\* -DestinationPath .\CodexTray-win-x64.zip
+          $hash = (Get-FileHash .\CodexTray-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  CodexTray-win-x64.zip" | Set-Content .\CodexTray-win-x64.zip.sha256
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create $env:GITHUB_REF_NAME
+          .\CodexTray-win-x64.zip .\CodexTray-win-x64.zip.sha256
+          --generate-notes --title $env:GITHUB_REF_NAME
