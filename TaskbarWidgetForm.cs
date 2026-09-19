@@ -54,6 +54,8 @@ internal sealed class TaskbarWidgetForm : Form
     private const int EdgeGap = 8;
     private const int DefaultWidth = 94;
     private const int ExternalPercentageWidth = 38;
+    private const int StaticLabelWidth = 25;
+    private const int CountdownLabelWidth = 56;
     private static readonly Color TransparentSurface = Color.FromArgb(1, 0, 1);
     private readonly ToolTip _tooltip = new();
     private readonly System.Windows.Forms.Timer _countdownTimer;
@@ -87,7 +89,7 @@ internal sealed class TaskbarWidgetForm : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = TransparentSurface;
         TransparencyKey = TransparentSurface;
-        ClientSize = new Size(GetDesiredWidth(ShowPercentages, PercentageSide), 42);
+        ClientSize = new Size(GetDesiredWidth(ShowLabels, ShowPercentages, LabelMode, PercentageSide), 42);
         ContextMenuStrip = menu;
         FormBorderStyle = FormBorderStyle.None;
         MaximizeBox = false;
@@ -177,7 +179,7 @@ internal sealed class TaskbarWidgetForm : Form
         LabelMode = labelMode;
         LabelSide = labelPosition;
         PercentageSide = percentagePosition;
-        var desiredWidth = GetDesiredWidth(showPercentages, percentagePosition);
+        var desiredWidth = GetDesiredWidth(showLabels, showPercentages, labelMode, percentagePosition);
         var sizeChanged = ClientSize.Width != desiredWidth;
         if (sizeChanged)
         {
@@ -396,6 +398,7 @@ internal sealed class TaskbarWidgetForm : Form
         var labelOnRight = ShowLabels && LabelSide == LabelPosition.Right;
         var percentageOnLeft = ShowPercentages && PercentageSide == PercentagePosition.Left;
         var percentageOnRight = ShowPercentages && PercentageSide == PercentagePosition.Right;
+        var labelWidth = LabelMode == LabelContentMode.TimeToReset ? CountdownLabelWidth : StaticLabelWidth;
         var contentLeft = 3;
         var contentRight = Width - 7;
         Rectangle? externalPercentageBounds = null;
@@ -410,7 +413,7 @@ internal sealed class TaskbarWidgetForm : Form
         if (labelOnLeft)
         {
             labelX = contentLeft;
-            contentLeft += 25;
+            contentLeft += labelWidth;
         }
 
         if (percentageOnRight)
@@ -421,7 +424,7 @@ internal sealed class TaskbarWidgetForm : Form
 
         if (labelOnRight)
         {
-            contentRight -= 25;
+            contentRight -= labelWidth;
             labelX = contentRight + 2;
         }
 
@@ -505,10 +508,10 @@ internal sealed class TaskbarWidgetForm : Form
 
         if (remaining < TimeSpan.FromDays(1))
         {
-            return $"{Math.Max(1, (int)remaining.TotalHours)}h";
+            return $"{Math.Max(1, (int)remaining.TotalHours)}h {remaining.Minutes}m";
         }
 
-        return $"{Math.Max(1, (int)remaining.TotalDays)}d";
+        return $"{Math.Max(1, (int)remaining.TotalDays)}d {remaining.Hours}h";
     }
 
     protected override void Dispose(bool disposing)
@@ -992,8 +995,14 @@ internal sealed class TaskbarWidgetForm : Form
 
     private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96d);
 
-    private static int GetDesiredWidth(bool showPercentages, PercentagePosition position) =>
-        DefaultWidth + (showPercentages && position != PercentagePosition.Center ? ExternalPercentageWidth : 0);
+    private static int GetDesiredWidth(
+        bool showLabels,
+        bool showPercentages,
+        LabelContentMode labelMode,
+        PercentagePosition position) =>
+        DefaultWidth +
+        (showLabels && labelMode == LabelContentMode.TimeToReset ? CountdownLabelWidth - StaticLabelWidth : 0) +
+        (showPercentages && position != PercentagePosition.Center ? ExternalPercentageWidth : 0);
 
     private static bool TryGetTaskbar(Screen targetScreen, out IntPtr taskbarHandle, out Rectangle rectangle)
     {
