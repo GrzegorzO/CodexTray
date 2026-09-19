@@ -33,6 +33,9 @@ internal static class SelfTest
             Assert(TrayIconRenderer.ColorFor(50).R == 242, "orange threshold");
             Assert(TrayIconRenderer.ColorFor(26).R == 242, "orange lower bound");
             Assert(TrayIconRenderer.ColorFor(25).R == 225, "red threshold");
+            Assert(TrayIconRenderer.ColorFor(6).R == 225, "red lower bound");
+            Assert(TrayIconRenderer.ColorFor(5) == Color.FromArgb(168, 85, 247), "purple threshold");
+            Assert(TrayIconRenderer.ColorFor(0) == Color.FromArgb(168, 85, 247), "purple lower bound");
             using var icon = TrayIconRenderer.Render(snapshot);
             Assert(icon.Width > 0 && icon.Height > 0, "battery icon rendering");
             Assert(TaskbarWidgetForm.IsShellProcessName("StartMenuExperienceHost"), "Start menu shell surface");

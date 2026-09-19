@@ -11,7 +11,8 @@ browser, no Electron runtime, no telemetry, and no model request on refresh.
 ## Highlights
 
 - Two filled battery gauges: 5-hour on top, weekly on the bottom
-- Green above 50%, orange above 25%, red at 25% or below
+- Blue at 90% or above, green above 50%, orange above 25%, red above 5%,
+  and purple for the last 5%
 - Eleven styles: Classic, Futuristic, Fluent, Minimal, High contrast, Neon,
   Glass, Pixel, Carbon, Dots, and a color-independent Pencil-sketch meter
 - Static `5h` / `7d` labels or live time-to-reset labels

@@ -42,7 +42,8 @@ internal static class TrayIconRenderer
         >= 90 => Color.FromArgb(45, 125, 245),
         > 50 => Color.FromArgb(32, 190, 95),
         > 25 => Color.FromArgb(242, 153, 34),
-        _ => Color.FromArgb(225, 55, 55)
+        > 5 => Color.FromArgb(225, 55, 55),
+        _ => Color.FromArgb(168, 85, 247)
     };
 
     private static void DrawBattery(Graphics graphics, Rectangle bounds, int? remainingPercent)

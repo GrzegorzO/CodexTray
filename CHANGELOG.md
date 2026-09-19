@@ -5,6 +5,10 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Purple battery color for the final 5% of remaining usage
+
 ### Fixed
 
 - Tie each widget's visibility to its taskbar, including auto-hide and taskbars
