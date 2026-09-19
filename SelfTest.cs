@@ -26,6 +26,9 @@ internal static class SelfTest
             Assert(snapshot.TrayPercent == 72, "tray percentage");
             Assert(snapshot.PlanType == "plus", "plan type");
             Assert(snapshot.ToTooltip().Contains("5h 23%", StringComparison.Ordinal), "tooltip");
+            Assert(TrayIconRenderer.ColorFor(100) == Color.FromArgb(45, 125, 245), "blue upper bound");
+            Assert(TrayIconRenderer.ColorFor(90) == Color.FromArgb(45, 125, 245), "blue threshold");
+            Assert(TrayIconRenderer.ColorFor(89).G == 190, "green upper bound");
             Assert(TrayIconRenderer.ColorFor(51).G == 190, "green threshold");
             Assert(TrayIconRenderer.ColorFor(50).R == 242, "orange threshold");
             Assert(TrayIconRenderer.ColorFor(26).R == 242, "orange lower bound");

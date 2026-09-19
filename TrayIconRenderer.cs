@@ -39,6 +39,7 @@ internal static class TrayIconRenderer
 
     internal static Color ColorFor(int remainingPercent) => remainingPercent switch
     {
+        >= 90 => Color.FromArgb(45, 125, 245),
         > 50 => Color.FromArgb(32, 190, 95),
         > 25 => Color.FromArgb(242, 153, 34),
         _ => Color.FromArgb(225, 55, 55)
