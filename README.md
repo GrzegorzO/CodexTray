@@ -8,6 +8,8 @@ browser, no Electron runtime, no telemetry, and no model request on refresh.
 
 ![All eleven CodexTray visual styles](docs/images/styles-gallery.png)
 
+![All eleven CodexTray visual styles with time-left labels](docs/images/time-left-gallery.png)
+
 ## Highlights
 
 - Two filled battery gauges: 5-hour on top, weekly on the bottom
@@ -25,6 +27,9 @@ browser, no Electron runtime, no telemetry, and no model request on refresh.
 - Refreshes every two minutes without repainting unchanged values
 - Transparent taskbar surface with event-driven z-order recovery after overlays
 - Uses the existing local Codex sign-in; it never reads or stores credentials
+
+The second gallery shows the live time-to-reset label mode: the top and bottom
+labels show the remaining time in the current 5-hour and weekly windows.
 
 ## Install
 
