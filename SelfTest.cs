@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml.Linq;
 
 namespace CodexTray;
 
@@ -8,6 +9,8 @@ internal static class SelfTest
     {
         try
         {
+            VerifyStartupTask();
+            VerifyStartupRecovery();
             using var document = JsonDocument.Parse("""
                 {
                   "rateLimits": {},
@@ -81,5 +84,57 @@ internal static class SelfTest
         {
             throw new InvalidOperationException($"Self-test failed: {name}");
         }
+    }
+
+    private static void VerifyStartupTask()
+    {
+        const string executable = @"C:\Apps\Usage & tools\CodexTray.exe";
+        const string userSid = "S-1-5-21-123-456-789-1001";
+        var task = XElement.Parse(StartupManager.CreateTaskXml(executable, userSid));
+        XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+        var principal = task.Element(ns + "Principals")!.Element(ns + "Principal")!;
+        var trigger = task.Element(ns + "Triggers")!.Element(ns + "LogonTrigger")!;
+        var settings = task.Element(ns + "Settings")!;
+        var action = task.Element(ns + "Actions")!.Element(ns + "Exec")!;
+        Assert((string?)principal.Element(ns + "UserId") == userSid &&
+            (string?)trigger.Element(ns + "UserId") == userSid, "startup is limited to the current user");
+        Assert((string?)principal.Element(ns + "LogonType") == "InteractiveToken" &&
+            (string?)principal.Element(ns + "RunLevel") == "LeastPrivilege", "startup uses the interactive desktop without elevation");
+        Assert((string?)action.Element(ns + "Command") == executable &&
+            (string?)action.Element(ns + "WorkingDirectory") == Path.GetDirectoryName(executable), "startup preserves paths with spaces and XML characters");
+        Assert((string?)action.Element(ns + "Arguments") == "--startup-supervisor", "startup launches the recovery supervisor");
+        Assert((string?)settings.Element(ns + "ExecutionTimeLimit") == "PT0S", "startup never stops a long-running widget at the scheduler's default time limit");
+        Assert((bool?)settings.Element(ns + "DisallowStartIfOnBatteries") == false &&
+            (bool?)settings.Element(ns + "StopIfGoingOnBatteries") == false, "startup works on battery power");
+        Assert((int?)settings.Element(ns + "RestartOnFailure")!.Element(ns + "Count") == 3 &&
+            (string?)settings.Element(ns + "RestartOnFailure")!.Element(ns + "Interval") == "PT1M", "startup failures receive bounded retries");
+    }
+
+    private static void VerifyStartupRecovery()
+    {
+        var attempts = 0;
+        var waits = 0;
+        var result = StartupSupervisor.RunAttempts(() => ++attempts < 3 ? -1 : 0, () => waits++, _ => { });
+        Assert(result == 0 && attempts == 3 && waits == 2, "recovery observes child failures including forced termination");
+
+        attempts = waits = 0;
+        result = StartupSupervisor.RunAttempts(() => { attempts++; return 0; }, () => waits++, _ => { });
+        Assert(result == 0 && attempts == 1 && waits == 0, "normal Exit does not restart the widget");
+
+        attempts = waits = 0;
+        result = StartupSupervisor.RunAttempts(() => { attempts++; return 1; }, () => waits++, _ => { });
+        Assert(result == 1 && attempts == 4 && waits == 3, "persistent failures exhaust a bounded recovery budget");
+
+        attempts = waits = 0;
+        result = StartupSupervisor.RunAttempts(() =>
+        {
+            if (++attempts == 1)
+            {
+                throw new System.ComponentModel.Win32Exception(2);
+            }
+
+            return 0;
+        }, () => waits++, _ => { });
+        Assert(result == 0 && attempts == 2 && waits == 1, "a failure before child startup is retried");
     }
 }

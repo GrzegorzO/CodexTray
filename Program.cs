@@ -5,6 +5,20 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        try
+        {
+            return Run(args);
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"Fatal application error: {exception}");
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+    }
+
+    private static int Run(string[] args)
+    {
         if (args.Contains("--print", StringComparer.OrdinalIgnoreCase))
         {
             return PrintUsageAsync().GetAwaiter().GetResult();
@@ -39,35 +53,40 @@ internal static class Program
             return 0;
         }
 
-        using var mutex = new Mutex(true, @"Local\CodexTray", out var isFirstInstance);
-        if (!isFirstInstance)
+        if (args.Contains("--startup-supervisor", StringComparer.OrdinalIgnoreCase))
         {
-            return 0;
+            return StartupSupervisor.Run();
         }
 
         var startedByWindows = args.Contains("--startup", StringComparer.OrdinalIgnoreCase);
-        AppLog.Write($"Launch requested (startup={startedByWindows}, style={WidgetSettings.SelectedStyle}).");
+        AppLog.Write($"Launch requested (startup={startedByWindows}, executable={Environment.ProcessPath}, version={typeof(Program).Assembly.GetName().Version}, package={AppLog.PackageContext}).");
 
-        try
+        using var mutex = new Mutex(true, @"Local\CodexTray", out var isFirstInstance);
+        if (!isFirstInstance)
         {
-            // Explorer and secondary taskbars can still be coming online when a
-            // Startup shortcut is invoked. Give the shell a moment before attaching the
-            // taskbar-owned windows; interactive launches remain immediate.
-            if (startedByWindows)
-            {
-                Thread.Sleep(TimeSpan.FromSeconds(10));
-            }
-
-            ApplicationConfiguration.Initialize();
-            Application.Run(new TrayApplicationContext());
-            AppLog.Write("Application exited normally.");
+            AppLog.Write("Launch skipped: another instance already holds Local\\CodexTray.");
             return 0;
         }
-        catch (Exception exception)
+
+        AppLog.Write($"Loading settings (style={WidgetSettings.SelectedStyle}, widgetVisible={WidgetSettings.Visible}).");
+
+        // Explorer and secondary taskbars can still be coming online at logon.
+        if (startedByWindows)
         {
-            AppLog.Write($"Fatal startup error: {exception}");
-            return 1;
+            Thread.Sleep(TimeSpan.FromSeconds(10));
         }
+
+        // WinForms otherwise displays a thread-error dialog and can leave an
+        // unusable process alive. A nonzero exit allows startup-task recovery.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+            AppLog.Write($"Unhandled application error: {eventArgs.ExceptionObject}");
+        ApplicationConfiguration.Initialize();
+        using var context = new TrayApplicationContext();
+        AppLog.Write("Tray initialized; entering message loop.");
+        Application.Run(context);
+        AppLog.Write("Application exited normally.");
+        return 0;
     }
 
     private static async Task<int> PrintUsageAsync()

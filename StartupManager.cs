@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
-using System.Text;
+using System.Security.Principal;
+using System.Xml.Linq;
 using Microsoft.Win32;
 
 namespace CodexTray;
@@ -7,99 +8,157 @@ namespace CodexTray;
 internal static class StartupManager
 {
     private const string ValueName = "CodexTray";
-    private const string ShortcutName = "CodexTray.lnk";
+    private const int TaskCreateOrUpdate = 6;
+    private const int TaskLogonInteractiveToken = 3;
+    private const int FileNotFound = unchecked((int)0x80070002);
 
-    public static bool IsEnabled => File.Exists(ShortcutPath);
+    public static bool IsEnabled
+    {
+        get
+        {
+            try
+            {
+                return WithTaskFolder(folder =>
+                {
+                    object? task = FindTask(folder);
+                    if (task is null)
+                    {
+                        return File.Exists(ShortcutPath);
+                    }
+
+                    try
+                    {
+                        return (bool)((dynamic)task).Enabled;
+                    }
+                    finally
+                    {
+                        Marshal.FinalReleaseComObject(task);
+                    }
+                });
+            }
+            catch (Exception exception) when (exception is COMException or InvalidOperationException)
+            {
+                // An unavailable scheduler must not prevent an interactive launch.
+                AppLog.Write($"Could not read startup task: {exception.Message}");
+                return File.Exists(ShortcutPath);
+            }
+        }
+    }
 
     public static void SetEnabled(bool enabled)
     {
-        if (enabled)
+        WithTaskFolder(folder =>
         {
-            var executable = Environment.ProcessPath
-                ?? throw new InvalidOperationException("The application path is unavailable.");
-            CreateStartupShortcut(executable);
-        }
-        else
-        {
-            File.Delete(ShortcutPath);
-        }
+            if (enabled)
+            {
+                var executable = Environment.ProcessPath
+                    ?? throw new InvalidOperationException("The application path is unavailable.");
+                object task = folder.RegisterTask(
+                    TaskName, CreateTaskXml(executable, UserSid), TaskCreateOrUpdate,
+                    UserSid, null, TaskLogonInteractiveToken, null);
+                Marshal.FinalReleaseComObject(task);
+                AppLog.Write($"Startup task registered: {TaskName}, executable={executable}.");
+            }
+            else
+            {
+                object? task = FindTask(folder);
+                if (task is not null)
+                {
+                    Marshal.FinalReleaseComObject(task);
+                    // Deleting the registration leaves the current widget running.
+                    folder.DeleteTask(TaskName, 0);
+                }
 
-        RemoveLegacyRunEntry();
-    }
+                AppLog.Write("Automatic startup disabled.");
+            }
 
-    private static string ShortcutPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.Startup),
-        ShortcutName);
+            return true;
+        });
 
-    private static void CreateStartupShortcut(string executable)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(ShortcutPath)!);
-        var shellLink = (IShellLinkW)(object)new ShellLink();
-        try
-        {
-            shellLink.SetPath(executable);
-            shellLink.SetArguments("--startup");
-            shellLink.SetWorkingDirectory(Path.GetDirectoryName(executable)!);
-            shellLink.SetDescription("Codex usage taskbar widget");
-            ((IPersistFile)shellLink).Save(ShortcutPath, remember: true);
-        }
-        finally
-        {
-            Marshal.FinalReleaseComObject(shellLink);
-        }
-    }
-
-    private static void RemoveLegacyRunEntry()
-    {
+        // Register the replacement successfully before removing the old launcher.
+        File.Delete(ShortcutPath);
         using var key = Registry.CurrentUser.OpenSubKey(
-            @"Software\Microsoft\Windows\CurrentVersion\Run",
-            writable: true);
+            @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
         key?.DeleteValue(ValueName, throwOnMissingValue: false);
     }
 
-    [ComImport]
-    [Guid("00021401-0000-0000-C000-000000000046")]
-    private sealed class ShellLink;
+    private static string ShortcutPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Startup), "CodexTray.lnk");
 
-    [ComImport]
-    [Guid("000214F9-0000-0000-C000-000000000046")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IShellLinkW
+    private static string UserSid
     {
-        void GetPath(StringBuilder file, int maximumPath, IntPtr findData, uint flags);
-        void GetIdList(out IntPtr idList);
-        void SetIdList(IntPtr idList);
-        void GetDescription(StringBuilder description, int maximumName);
-        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string description);
-        void GetWorkingDirectory(StringBuilder directory, int maximumPath);
-        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
-        void GetArguments(StringBuilder arguments, int maximumPath);
-        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
-        void GetHotkey(out short hotkey);
-        void SetHotkey(short hotkey);
-        void GetShowCommand(out int showCommand);
-        void SetShowCommand(int showCommand);
-        void GetIconLocation(StringBuilder iconPath, int iconPathLength, out int iconIndex);
-        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int iconIndex);
-        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
-        void Resolve(IntPtr window, uint flags);
-        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+        get
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            return identity.User?.Value
+                ?? throw new InvalidOperationException("The current Windows user is unavailable.");
+        }
     }
 
-    [ComImport]
-    [Guid("0000010B-0000-0000-C000-000000000046")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IPersistFile
+    private static string TaskName => $"CodexTray-{UserSid}";
+
+    internal static string CreateTaskXml(string executable, string userSid)
     {
-        void GetClassId(out Guid classId);
+        XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+        XElement Element(string name, object value) => new(ns + name, value);
 
-        [PreserveSig]
-        int IsDirty();
+        return new XElement(ns + "Task", new XAttribute("version", "1.2"),
+            Element("RegistrationInfo", Element("Description", "Codex usage taskbar widget")),
+            Element("Triggers", Element("LogonTrigger", new object[]
+            {
+                Element("Enabled", true), Element("UserId", userSid), Element("Delay", "PT10S")
+            })),
+            Element("Principals", new XElement(ns + "Principal", new XAttribute("id", "CurrentUser"),
+                Element("UserId", userSid), Element("LogonType", "InteractiveToken"),
+                Element("RunLevel", "LeastPrivilege"))),
+            Element("Settings", new object[]
+            {
+                Element("MultipleInstancesPolicy", "IgnoreNew"),
+                Element("DisallowStartIfOnBatteries", false), Element("StopIfGoingOnBatteries", false),
+                Element("AllowStartOnDemand", true), Element("StartWhenAvailable", true),
+                Element("Enabled", true), Element("ExecutionTimeLimit", "PT0S"),
+                Element("RestartOnFailure", new object[] { Element("Interval", "PT1M"), Element("Count", 3) })
+            }),
+            new XElement(ns + "Actions", new XAttribute("Context", "CurrentUser"),
+                Element("Exec", new object[]
+                {
+                    Element("Command", executable), Element("Arguments", "--startup-supervisor"),
+                    Element("WorkingDirectory", Path.GetDirectoryName(executable)!)
+                }))).ToString();
+    }
 
-        void Load([MarshalAs(UnmanagedType.LPWStr)] string fileName, uint mode);
-        void Save([MarshalAs(UnmanagedType.LPWStr)] string fileName, [MarshalAs(UnmanagedType.Bool)] bool remember);
-        void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string fileName);
-        void GetCurrentFile([MarshalAs(UnmanagedType.LPWStr)] out string fileName);
+    private static object? FindTask(dynamic folder)
+    {
+        try
+        {
+            return folder.GetTask(TaskName);
+        }
+        catch (COMException exception) when (exception.HResult == FileNotFound)
+        {
+            return null;
+        }
+    }
+
+    private static T WithTaskFolder<T>(Func<dynamic, T> action)
+    {
+        var schedulerType = Type.GetTypeFromProgID("Schedule.Service")
+            ?? throw new InvalidOperationException("Windows Task Scheduler is unavailable.");
+        object service = Activator.CreateInstance(schedulerType)!;
+        object? folder = null;
+        try
+        {
+            ((dynamic)service).Connect();
+            folder = ((dynamic)service).GetFolder(@"\");
+            return action(folder);
+        }
+        finally
+        {
+            if (folder is not null)
+            {
+                Marshal.FinalReleaseComObject(folder);
+            }
+
+            Marshal.FinalReleaseComObject(service);
+        }
     }
 }
-

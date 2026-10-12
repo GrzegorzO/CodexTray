@@ -112,9 +112,22 @@ window positioned over the selected taskbar area. Right-side placement detects
 the primary notification-area boundary when Windows exposes it; custom dragging
 is available when another taskbar layout needs adjustment.
 
-When **Start with Windows** is enabled, a standard shortcut in the current user's
-Startup folder launches the app with a short shell-readiness delay. Startup
-diagnostics are written to `%LOCALAPPDATA%\CodexTray\startup.log`.
+When **Start with Windows** is enabled, a per-user Task Scheduler logon task
+launches a small supervisor in your desktop session after a short delay. The
+supervisor starts the widget and retries failed runs up to three times, one
+minute apart. Choosing **Exit** ends both processes. The task runs on battery power and has no
+runtime limit. It uses your normal Windows permissions and stores no password.
+The task is named `CodexTray-<your Windows user SID>`.
+
+Older Startup-folder shortcuts remain supported. To replace one with the new
+task, turn **Start with Windows** off and on, or run the installed executable
+with `--enable-startup`. The old shortcut is removed only after registration
+succeeds. A task disabled in Task Scheduler appears unchecked in the app.
+
+Startup diagnostics, including duplicate-instance exits and UI initialization,
+are written to `%LOCALAPPDATA%\CodexTray\startup.log`. Task Scheduler also shows
+the last run time and result, including failures before .NET reaches the app's
+log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 
 ## Privacy and security
 

@@ -48,3 +48,18 @@ transient overlays. A lightweight visibility check hit-tests each taskbar's actu
 z-order presence, keeping its widget hidden whenever that taskbar is auto-hidden or
 covered by any fullscreen application. Windows shell surfaces such as Start and
 Search are recognized separately because they leave the taskbar visible.
+
+## Automatic startup
+
+`StartupManager` registers a per-user Task Scheduler logon task with an
+interactive token and normal privileges. It is independent of any packaged
+development app's redirected Startup-folder and registry view. The task starts
+`StartupSupervisor`, which launches the widget and waits for its exit without
+polling. Nonzero exits and launch exceptions receive up to three retries, one
+minute apart. A successful exit ends supervision. The scheduler has no runtime
+limit or battery restrictions, and duplicate supervisor and widget instances
+are prevented by separate named mutexes.
+
+`Program` logs before the widget mutex check and settings reads, and records
+initialization and fatal UI errors. Launch entries include the package context
+because Windows can redirect AppData logs and settings for packaged parents.

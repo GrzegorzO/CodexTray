@@ -11,6 +11,11 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Replace one-shot Startup-folder registration with a per-user logon task and
+  startup supervisor that retries failures, runs on battery power, and has no
+  execution time limit; a normal Exit stops both processes
+- Log launch attempts before the single-instance check and settings reads, log
+  successful tray initialization, and return failure for unhandled UI errors
 - Persist display styles by stable names while continuing to load legacy numeric
   settings, preventing styles such as Neon from reopening as Carbon
 - Tie each widget's visibility to its taskbar, including auto-hide and taskbars
