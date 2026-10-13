@@ -19,12 +19,19 @@ All notable changes are documented here. This project follows
 - Saved counter visibility, animation, and far-left/far-right placement settings
   with right-side placement by default
 - Local activity diagnostics via `--print-activity` and a loading-style gallery
-- Small (70%), Normal (100%), and Large (130%) agent-indicator sizes
+- Fixed Large working-agent indicators (130% of the original size), with the
+  size submenu removed and earlier Small/Normal preferences ignored
 - One-icon-per-task mode with spaced icons growing outward on either side
 - Saved synchronization toggle for repeated icons, with staggered timing retained
   by default
 
 ### Fixed
+
+- New working-task icons append at the outer edge instead of reshuffling
+  existing tasks by ID
+
+- Project badges now use the installed Codex Desktop vector shapes, with a
+  larger visible symbol and transparent background for clearer rendering
 
 - Count running main tasks only, excluding subagents and background guardian
   sessions while preserving separate user-created main-chat forks

@@ -23,13 +23,6 @@ internal enum AgentIndicatorPosition
     Left
 }
 
-internal enum AgentIndicatorSize
-{
-    Normal,
-    Small,
-    Large
-}
-
 internal enum AgentIndicatorMode
 {
     IconAndNumber,
@@ -55,29 +48,24 @@ internal static class AgentIndicatorRenderer
         _ => style.ToString()
     };
 
-    internal static float ScaleFor(AgentIndicatorSize size) => size switch
-    {
-        AgentIndicatorSize.Small => 0.7f,
-        AgentIndicatorSize.Large => 1.3f,
-        _ => 1f
-    };
+    internal const float Scale = 1.3f;
 
     private static int BaseWidthFor(int count, AgentIndicatorMode mode) => mode == AgentIndicatorMode.RepeatedIcons
         ? 12 + count * 20 + (count - 1) * 6
         : 32 + count.ToString(System.Globalization.CultureInfo.InvariantCulture).Length * 10;
 
-    internal static int WidthFor(int count, AgentIndicatorSize size = AgentIndicatorSize.Normal,
-        AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber) => count > 0
-        ? (int)Math.Ceiling(BaseWidthFor(count, mode) * ScaleFor(size)) : 0;
+    internal static int WidthFor(int count, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber) => count > 0
+        ? (int)Math.Ceiling(BaseWidthFor(count, mode) * Scale) : 0;
 
     // Index zero always sits nearest the other controls; new icons grow outward.
     internal static float IconXFor(int index, int count, AgentIndicatorPosition side) =>
-        8 + (side == AgentIndicatorPosition.Right ? index : count - 1 - index) * 26;
+        side == AgentIndicatorPosition.Right ? 8 + index * 26
+            : WidthFor(count, AgentIndicatorMode.RepeatedIcons) / Scale - 24 - index * 26;
 
     internal static int CycleDuration(LoadingIconStyle style) => style == LoadingIconStyle.Robot ? 3600 : 1200;
 
     internal static void Draw(Graphics graphics, Rectangle bounds, int count, LoadingIconStyle style, float phase,
-        AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
+        AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
         AgentIndicatorPosition side = AgentIndicatorPosition.Right, bool synchronizeAnimations = false,
         IReadOnlyList<Color?>? projectColors = null, IReadOnlyList<ProjectMarker?>? projectMarkers = null, bool colorLoadingIcons = true)
     {
@@ -88,8 +76,7 @@ internal static class AgentIndicatorRenderer
 
         var state = graphics.Save();
         graphics.TranslateTransform(bounds.Left, bounds.Top + bounds.Height / 2f);
-        var scale = ScaleFor(size);
-        graphics.ScaleTransform(scale, scale);
+        graphics.ScaleTransform(Scale, Scale);
         if (mode == AgentIndicatorMode.RepeatedIcons)
         {
             for (var index = 0; index < count; index++)
@@ -101,7 +88,7 @@ internal static class AgentIndicatorRenderer
                     colorLoadingIcons ? color : null);
                 if (projectMarkers is not null && index < projectMarkers.Count && projectMarkers[index] is { } marker)
                 {
-                    ProjectMarkerRenderer.Draw(graphics, new RectangleF(icon.Right - 3, icon.Top - 6, 10, 10), marker, color ?? DefaultColor);
+                    ProjectMarkerRenderer.Draw(graphics, new RectangleF(icon.Right - 4, icon.Top - 6, 12, 12), marker, color ?? DefaultColor);
                 }
             }
         }

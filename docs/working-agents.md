@@ -31,14 +31,17 @@ immediately to widgets on all monitors and are saved under
 | Show counter when working | On | Show activity when the count is nonzero. Turning it off hides the activity indicator. |
 | Loading icon style | Rotating arc | Choose from eleven styles, listed below. |
 | Counter position | Right of all controls | Place the indicator outside the full battery, label, and percentage group. Left is also available. |
-| Indicator size | Normal (100%) | Small is 70% and Large is 130% of Normal. Icons, numbers, and spacing scale together; the batteries keep their existing size. |
 | Display mode | Icon and number | Show one icon plus the count, or choose **One icon per task** to replace the number with repeated icons. |
 | Animate loading icon | On | Animate the selected style. Turn off for a static frame. |
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
 | Use project colors | Off | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
 | Show project icon | Off | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
 
-The indicator remains vertically centered at every size. Idle hiding is always
+Working-agent icons, numbers, and spacing always use the former Large size (130%
+of the original). There is no size setting; earlier Small/Normal preferences are
+ignored. The batteries keep their existing size.
+
+The indicator remains vertically centered. Idle hiding is always
 applied; there is no visible zero-state icon or reserved gap.
 
 ### Display modes
@@ -50,7 +53,10 @@ remaining work.
 
 Additional icons extend outward from the battery group: rightward when the
 indicator is on the right and leftward when it is on the left. Existing battery
-controls stay anchored where space permits; the widget shifts when needed to
+and task icons keep their positions when new tasks appear, subject to available
+taskbar space. Newly active tasks join the outer edge, including resumed tasks;
+completed icons are removed while the remaining task order is preserved. The
+widget shifts when needed to
 fit within the available taskbar area.
 
 Synchronization changes animation timing only. With synchronization on, robot
@@ -58,7 +64,7 @@ heads blink and bob together, and other styles share the same animation phase.
 With it off, each repeated icon has an offset. In icon-and-number mode there is
 only one activity icon, so the synchronization option has no visible effect.
 
-![Static previews of the three sizes and both display modes](images/agent-layout-gallery.png)
+![Static previews of both display modes and positions](images/agent-layout-gallery.png)
 
 ### Project colors
 
@@ -84,17 +90,26 @@ do not remove the task from the count.
 ### Project icon badges
 
 Enable **Show project icon** to add a small, stationary project marker at the
-upper-right of each repeated loading icon. It has its own saved switch and works
+upper-right of each repeated loading icon, with no background behind the symbol.
+It has its own saved switch and works
 independently of **Use project colors**. The badge always uses its project's color,
 even when the loading icon keeps its normal blue. Projects with default or
 unsupported colors use blue for the badge too.
 
-CodexTray draws simplified versions of the desktop's named project markers,
-including folders, planes, terminals, and wrenches. Emoji markers use a
+CodexTray reads the installed desktop app's vector shapes for named project
+markers, including its sidebar folder, planes, terminals, and wrenches. Vectors
+are rendered directly at the widget's drawing scale, with no bitmap enlargement,
+and use the full badge area for legibility. Emoji markers use a
 monochrome Windows font glyph tinted with the project color. Projects without a
 supported marker use a folder; unmatched and explicitly projectless tasks have
 no badge. Badges scale with the loading icon and retain the same task association
 on either side of the batteries. Switching them off restores the unbadged icon.
+
+Desktop vectors are loaded from the installed app's local `resources/app.asar`
+archive and cached in memory. CodexTray reads only icon data; it does not execute
+the app's JavaScript or modify the installation. If the app is missing or its
+asset format is unsupported, built-in drawings remain available as a fallback.
+Restart CodexTray after a desktop update to reload its icons.
 
 ![Project badges with blue and project-colored loading icons](images/project-icons-gallery.png)
 
@@ -152,6 +167,9 @@ format is also an implementation detail; incompatible or unavailable color
 metadata falls back to blue. Codex CLI-only installations can still show the
 main-task count without desktop project colors.
 
+Project icon badges additionally read named vector assets from the local Codex
+Desktop installation. These assets are not bundled with CodexTray.
+
 Session logs can contain prompts, responses, and tool output. CodexTray reads
 the files to interpret session type, parent links, lifecycle event types, and
 turn IDs. It keeps paths, read offsets, and current turn state in memory; it does
@@ -172,6 +190,7 @@ Activity checks do not start a model request or consume Codex tokens.
 | Use project colors is unavailable | Select **Display mode → One icon per task** first. The option does not apply to the single icon-and-number display. |
 | Show project icon is unavailable | Select **Display mode → One icon per task** first. The switch is independent of Use project colors. |
 | No badge on an otherwise working task icon | Confirm Show project icon is enabled and the task can be matched to a local project. Unmatched and explicitly projectless tasks have no badge. |
+| A named project badge differs from the desktop icon | Run the project-icon diagnostic below. Unsupported or unavailable desktop assets use built-in fallback drawings. Restart CodexTray after updating Codex Desktop. |
 | A task icon remains blue with project colors enabled | Confirm the project has a supported custom color in Codex Desktop and the app state is available under the same `CODEX_HOME`. Projectless, default-colored, or unmatched tasks intentionally use blue. |
 | A widget disappears during fullscreen video | Expected on the monitor whose taskbar is covered. A visible taskbar on another monitor should retain its widget. Auto-hidden taskbars also hide their widgets. |
 | The widget flickers on another monitor during fullscreen video | Use a build containing the fullscreen flicker fix. If it persists, report monitor layout, display scaling, video/browser details, and widget settings. |
@@ -189,7 +208,17 @@ dotnet run --configuration Release -- --print-activity --project-colors
 ```
 
 The diagnostic prints the count and an RGB color or `default` for each task in
-icon order. It does not print task titles, project names, or working directories.
+its detection order. A fresh diagnostic does not share the running widget's
+ordering history. It does not print task titles, project names, or working directories.
+
+To check whether the installed desktop's named vector icons can be loaded:
+
+```powershell
+dotnet run --configuration Release -- --print-project-icons
+```
+
+A compatible installation reports `30/30`. An optional archive path after the
+flag checks that specific local `app.asar` file instead of automatic discovery.
 
 For a [public bug report](https://github.com/GrzegorzO/CodexTray/issues/new?template=bug_report.yml),
 include the CodexTray build or commit, Codex version, display configuration,

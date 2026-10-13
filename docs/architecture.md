@@ -32,19 +32,24 @@ and collapse it completely at zero. The animation timer invalidates the complete
 buffered window while visible and active; the reduced-motion setting draws a
 static frame. Counter visibility, style, motion, and side use the same per-user
 registry settings as the existing display options.
-Indicator size scales the native drawing by 0.7, 1.0, or 1.3, including the count
-and spacing. Repeated-icon mode reserves one slot per working agent and reverses
+The native indicator drawing uses a fixed 1.3 scale, including the count
+and spacing. The old size registry preference is ignored and the size submenu
+has been removed. Repeated-icon mode reserves one slot per working agent and reverses
 slot order on the left, keeping the first icon nearest the battery controls.
 The battery group stays anchored during activity resizing where taskbar bounds
-permit it. Size and mode are also persisted, defaulting to Normal and icon/count
-for existing installations.
+permit it. Left-side icon positions account for rounded physical strip widths,
+so new icons do not shift existing ones by a fraction of a pixel. Display mode
+is persisted and defaults to icon/count.
 Repeated icons can share one animation phase or use an index-based phase offset.
 The synchronization preference applies immediately and is persisted, defaulting
 to the existing staggered timing.
 
 `ReadTasks` retains stable thread IDs and working directories alongside each
-main task's optional project color. Task IDs define a stable icon order across
-polls. When coloring or badges are enabled in repeated-icon mode, `ProjectColorReader`
+main task's optional project color. The monitor preserves the order of tasks
+already working and appends newly active tasks. Their icons grow outward without
+reordering existing icons or changing their animation offsets. Completed tasks
+are removed; a resumed task rejoins at the outer edge. When coloring or badges
+are enabled in repeated-icon mode, `ProjectColorReader`
 reads `.codex-global-state.json` with shared read access and caches only the
 project-color/marker/assignment metadata. File timestamp and length changes trigger
 reloads; partial writes preserve the last valid mapping. Explicit project
@@ -56,8 +61,15 @@ and no Codex settings or state files are written.
 
 Project markers travel alongside the color in `WorkingTask`. The independent
 `Show project icon` preference draws a stationary badge at the upper-right of
-each repeated icon. `ProjectMarkerRenderer` uses original simplified GDI+ paths
-for named markers and monochrome font glyphs for emoji. Badges always take the
+each repeated icon. `DesktopProjectIcons` locates the current desktop installation
+through running processes, the current user's package registry, or installation
+directories. It reads the ASAR index and the icon data in the app's assets without
+executing JavaScript. The sidebar's folder fallback and the desktop's authored
+16px named presets are cached as vector geometry. `ProjectVectorIcon` converts
+SVG paths to GDI+ curves, preserving separate filled paths and even-odd holes.
+`ProjectMarkerRenderer` draws the vectors directly at the requested scale with
+transparent surroundings. Built-in drawings cover unavailable/unsupported
+assets; emoji use monochrome font glyphs. Badges always take the
 project accent, even when loading-icon coloring is off. Unknown markers fall
 back to folders; unmatched/projectless tasks have no badge. Badge geometry fits
 inside the existing indicator width and scales with the loading icons.

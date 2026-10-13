@@ -26,7 +26,7 @@ above 100%, and left/right/custom placement. Regenerate the style gallery with
 the screenshot-export command documented in the README when rendering changes.
 
 For working-agent changes, verify idle hiding, task completion and interruption,
-all icon styles and sizes, both display modes, left/right expansion, and
+all icon styles at the fixed large size, both display modes, left/right expansion, and
 synchronized/staggered timing. Check fullscreen video on one display while the
 other display's taskbar remains visible. Keep the
 [working-agent guide](docs/working-agents.md), README menu labels/defaults, and
@@ -36,6 +36,9 @@ projectless and missing-color fallbacks, live recoloring, and color association
 on both sides. Use synthetic project metadata and previews in public artifacts.
 Check that project badges can be switched independently, keep their project
 color with blue loading icons, and repaint after marker-only changes.
+Use synthetic SVG/ASAR fixtures to test vector decoding; do not commit extracted
+desktop source or assets. Check the optional live `--print-project-icons`
+diagnostic and transparent rendering at different display scales.
 
 ## Pull requests
 

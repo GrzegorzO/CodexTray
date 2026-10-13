@@ -19,6 +19,14 @@ internal static class Program
 
     private static int Run(string[] args)
     {
+        if (args.Contains("--print-project-icons", StringComparer.OrdinalIgnoreCase))
+        {
+            var argument = Array.FindIndex(args, value => value.Equals("--print-project-icons", StringComparison.OrdinalIgnoreCase));
+            var count = argument + 1 < args.Length && !args[argument + 1].StartsWith("--", StringComparison.Ordinal)
+                ? DesktopProjectIcons.LoadArchive(args[argument + 1]).Count : DesktopProjectIcons.Count;
+            Console.WriteLine($"Desktop project vectors loaded: {count}/30");
+            return 0;
+        }
         if (args.Contains("--print-activity", StringComparer.OrdinalIgnoreCase))
         {
             var includeColors = args.Contains("--project-colors", StringComparer.OrdinalIgnoreCase);

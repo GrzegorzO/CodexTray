@@ -43,7 +43,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _projectIconsItem;
     private readonly Dictionary<LoadingIconStyle, ToolStripMenuItem> _agentStyleItems = [];
     private readonly Dictionary<AgentIndicatorPosition, ToolStripMenuItem> _agentPositionItems = [];
-    private readonly Dictionary<AgentIndicatorSize, ToolStripMenuItem> _agentSizeItems = [];
     private readonly Dictionary<AgentIndicatorMode, ToolStripMenuItem> _agentModeItems = [];
     private readonly List<Bitmap> _agentMenuImages = [];
     private int _workingAgentCount;
@@ -332,29 +331,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             loadingStyleMenu.DropDownItems.Add(item);
         }
         agentMenu.DropDownItems.Add(loadingStyleMenu);
-        var agentSizeMenu = new ToolStripMenuItem("Indicator size");
-        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
-        {
-            var title = size switch
-            {
-                AgentIndicatorSize.Small => "Small (70%)",
-                AgentIndicatorSize.Large => "Large (130%)",
-                _ => "Normal (100%, default)"
-            };
-            var item = new ToolStripMenuItem(title) { Checked = WidgetSettings.SelectedAgentIndicatorSize == size };
-            item.Click += (_, _) =>
-            {
-                WidgetSettings.SelectedAgentIndicatorSize = size;
-                foreach (var pair in _agentSizeItems)
-                {
-                    pair.Value.Checked = pair.Key == size;
-                }
-                ApplyAgentSettings();
-            };
-            _agentSizeItems.Add(size, item);
-            agentSizeMenu.DropDownItems.Add(item);
-        }
-        agentMenu.DropDownItems.Add(agentSizeMenu);
         var agentModeMenu = new ToolStripMenuItem("Display mode");
         foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
         {
@@ -505,7 +481,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             widget.ApplyAgentSettings(WidgetSettings.ShowAgentCounter, WidgetSettings.AnimateAgentCounter,
                 WidgetSettings.SelectedLoadingIconStyle, WidgetSettings.SelectedAgentIndicatorPosition,
-                WidgetSettings.SelectedAgentIndicatorSize, WidgetSettings.SelectedAgentIndicatorMode,
+                WidgetSettings.SelectedAgentIndicatorMode,
                 WidgetSettings.SynchronizeAgentAnimations, WidgetSettings.UseProjectColors, WidgetSettings.ShowProjectIcons);
         }
     }

@@ -30,7 +30,7 @@ use unreleased features; check the changelog when using a release archive.
   animated robot head; hidden entirely when idle
 - Counter at the far left or right (default), centered vertically, with optional
   animation and synchronization
-- Small (70%), Normal (100%), and Large (130%) agent indicators
+- Working-agent icons use a fixed, large size for readability
 - Icon and number, or one spaced icon per running main task, expanding outward
 - Optional project colors for repeated task icons, matching Codex Desktop's palette
 - Switchable project icon badges at the upper-right of repeated loading icons
@@ -101,7 +101,6 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Show counter when working** | Enable or disable the activity indicator (enabled by default) |
 | **Display → Working agents → Loading icon style** | Eleven activity-icon styles, including Robot head; Rotating arc by default |
 | **Display → Working agents → Counter position** | Right of all controls (default) or left of all controls |
-| **Display → Working agents → Indicator size** | Small (70%), Normal (100%, default), or Large (130%) |
 | **Display → Working agents → Display mode** | Icon and number (default), or one icon per running main task |
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
@@ -134,7 +133,9 @@ input still counts until completion or interruption. The indicator is vertically
 centered beside the full battery, label, and percentage group. At zero, both the
 icon and count disappear and the widget releases that space. Turning off animation
 keeps the selected icon static.
-Size scales the indicator's icons, count, and spacing; the usage batteries keep
+Working-agent icons, count, and spacing use the former Large size (130% of the
+original). This fixed size also applies to existing installations; earlier size
+preferences are ignored and there is no size submenu. The usage batteries keep
 their existing size. In **One icon per task** mode, two main tasks show two icons
 with no number. Additional icons extend rightward on the right side and leftward
 on the left side. The battery group stays anchored while space is available;
@@ -153,8 +154,10 @@ Enable **Show project icon** to add the project's selected marker at the upper-r
 of each repeated loading icon. This separate switch works with **Use project
 colors** on or off: the badge always uses the project color (usual blue when no
 custom color is available). Badges stay still while the loading icons animate.
+Named badges use the installed Codex Desktop app's vector shapes with transparent
+backgrounds; built-in drawings cover unavailable or unsupported desktop assets.
 
-![Agent indicator sizes and display modes](docs/images/agent-layout-gallery.png)
+![Agent indicator display modes and positions](docs/images/agent-layout-gallery.png)
 
 ![Example project colors with repeated task icons](docs/images/project-colors-gallery.png)
 
@@ -225,6 +228,8 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
   not upload, save, or log that content, and does not change session-file contents.
 - Project coloring and badges read local desktop project metadata only while enabled in
   repeated-icon mode. It does not modify Codex's state or project settings.
+- Project badges read named vector shapes from the installed desktop app's local
+  archive without executing its JavaScript. Those assets are not bundled here.
 - No model prompts or generation requests
 - Network/authentication behavior is delegated to the installed Codex app server
 - Display preferences remain in the current user's Windows registry hive
@@ -240,6 +245,7 @@ dotnet run --configuration Release --no-build -- --self-test
 dotnet run --configuration Release --no-build -- --print
 dotnet run --configuration Release --no-build -- --print-activity
 dotnet run --configuration Release --no-build -- --print-activity --project-colors
+dotnet run --configuration Release --no-build -- --print-project-icons
 dotnet run --configuration Release --no-build -- --export-screenshots .\docs\images
 ```
 

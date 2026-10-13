@@ -76,13 +76,12 @@ internal sealed class TaskbarWidgetForm : Form
     internal bool AnimateAgentCounter { get; private set; } = true;
     internal LoadingIconStyle AgentIconStyle { get; private set; }
     internal AgentIndicatorPosition AgentCounterSide { get; private set; }
-    internal AgentIndicatorSize AgentCounterSize { get; private set; }
     internal AgentIndicatorMode AgentCounterMode { get; private set; }
     internal bool SynchronizeAgentAnimations { get; private set; }
     internal bool UseProjectColors { get; private set; }
     internal bool ShowProjectIcons { get; private set; }
     internal int AgentCounterWidth => ShowAgentCounter
-        ? AgentIndicatorRenderer.WidthFor(_workingAgentCount, AgentCounterSize, AgentCounterMode) : 0;
+        ? AgentIndicatorRenderer.WidthFor(_workingAgentCount, AgentCounterMode) : 0;
     internal Rectangle AgentCounterBounds => new(
         AgentCounterSide == AgentIndicatorPosition.Left ? 0 : ClientSize.Width - AgentCounterWidth,
         0, AgentCounterWidth, ClientSize.Height);
@@ -113,7 +112,6 @@ internal sealed class TaskbarWidgetForm : Form
             AnimateAgentCounter = WidgetSettings.AnimateAgentCounter;
             AgentIconStyle = WidgetSettings.SelectedLoadingIconStyle;
             AgentCounterSide = WidgetSettings.SelectedAgentIndicatorPosition;
-            AgentCounterSize = WidgetSettings.SelectedAgentIndicatorSize;
             AgentCounterMode = WidgetSettings.SelectedAgentIndicatorMode;
             SynchronizeAgentAnimations = WidgetSettings.SynchronizeAgentAnimations;
             UseProjectColors = WidgetSettings.UseProjectColors;
@@ -191,7 +189,7 @@ internal sealed class TaskbarWidgetForm : Form
     }
 
     internal void ApplyAgentSettings(bool show, bool animate, LoadingIconStyle style, AgentIndicatorPosition side,
-        AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
+        AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
         bool synchronizeAnimations = false, bool useProjectColors = false, bool showProjectIcons = false)
     {
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
@@ -199,7 +197,6 @@ internal sealed class TaskbarWidgetForm : Form
         AnimateAgentCounter = animate;
         AgentIconStyle = style;
         AgentCounterSide = side;
-        AgentCounterSize = size;
         AgentCounterMode = mode;
         SynchronizeAgentAnimations = synchronizeAnimations;
         UseProjectColors = useProjectColors;
@@ -573,7 +570,7 @@ internal sealed class TaskbarWidgetForm : Form
             var duration = AgentIndicatorRenderer.CycleDuration(AgentIconStyle);
             var phase = AnimateAgentCounter ? (Environment.TickCount64 % duration) / (float)duration : 0.25f;
             AgentIndicatorRenderer.Draw(graphics, AgentCounterBounds, _workingAgentCount, AgentIconStyle, phase,
-                AgentCounterSize, AgentCounterMode, AgentCounterSide, SynchronizeAgentAnimations,
+                AgentCounterMode, AgentCounterSide, SynchronizeAgentAnimations,
                 (UseProjectColors || ShowProjectIcons) && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskColors : null,
                 ShowProjectIcons && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskMarkers : null,
                 colorLoadingIcons: UseProjectColors);
@@ -1459,12 +1456,6 @@ internal static class WidgetSettings
     {
         get => ReadEnum("AgentIndicatorPosition", AgentIndicatorPosition.Right);
         set => WriteEnum("AgentIndicatorPosition", value);
-    }
-
-    public static AgentIndicatorSize SelectedAgentIndicatorSize
-    {
-        get => ReadEnum("AgentIndicatorSize", AgentIndicatorSize.Normal);
-        set => WriteEnum("AgentIndicatorSize", value);
     }
 
     public static AgentIndicatorMode SelectedAgentIndicatorMode

@@ -5,21 +5,24 @@ namespace CodexTray;
 
 internal static class ProjectMarkerRenderer
 {
-    // Original, simplified taskbar glyphs rather than copied desktop assets.
+    // Use installed desktop vectors when available; built-in drawings are a fallback.
     internal static void Draw(Graphics graphics, RectangleF bounds, ProjectMarker marker, Color color)
     {
         var state = graphics.Save();
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var background = new SolidBrush(Color.FromArgb(15, 23, 30));
-        graphics.FillEllipse(background, bounds);
-        graphics.TranslateTransform(bounds.X + 1, bounds.Y + 1);
-        graphics.ScaleTransform((bounds.Width - 2) / 16, (bounds.Height - 2) / 16);
+        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        graphics.TranslateTransform(bounds.X, bounds.Y);
+        graphics.ScaleTransform(bounds.Width / 16, bounds.Height / 16);
         graphics.SetClip(new RectangleF(0, 0, 16, 16), CombineMode.Intersect);
         using var pen = new Pen(color, 1.7f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
         using var brush = new SolidBrush(color);
         if (marker.IsEmoji)
         {
             DrawSymbol(graphics, marker.Value, brush);
+        }
+        else if (DesktopProjectIcons.TryGet(marker.Value, out var vector) && vector is not null)
+        {
+            vector.Draw(graphics, brush);
         }
         else
         {

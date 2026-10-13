@@ -17,6 +17,7 @@ internal static class SelfTest
             VerifyAgentActivity();
             VerifyMainTaskCounting();
             VerifyProjectColors();
+            VerifyDesktopProjectIcons();
             VerifyAgentIndicator();
             using var document = JsonDocument.Parse("""
                 {
@@ -217,11 +218,11 @@ internal static class SelfTest
         var appearancePath = Path.Combine(home, ".codex-global-state.json");
         try
         {
-            var main = AddTask("vscode");
+            var main = AddTask("vscode", idOverride: "ffffffff-ffff-ffff-ffff-ffffffffffff");
             AddTask(new { subagent = new { other = "guardian" } }, parent: main.Id);
             AddTask(new { subagent = new { thread_spawn = new { parent_thread_id = main.Id, depth = 1 } } });
             AddTask("vscode", parent: main.Id);
-            var second = AddTask("cli", acquireLock: false);
+            var second = AddTask("cli", acquireLock: false, idOverride: "00000000-0000-0000-0000-000000000001");
             var fork = AddTask("vscode", forkedFrom: main.Id, acquireLock: false);
             var monitor = new AgentActivityMonitor(home);
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "one main task with guardian and workers counts once");
@@ -243,11 +244,19 @@ internal static class SelfTest
             second.Writer.Lock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 2, "two independent main tasks count twice");
             var ordered = monitor.ReadTasks(CancellationToken.None).Select(task => task.ThreadId).ToArray();
-            Assert(ordered.SequenceEqual(new[] { main.Id, second.Id }.Order(StringComparer.Ordinal)), "task icon order stays stable across polls");
+            Assert(ordered.SequenceEqual(new[] { main.Id, second.Id }), "new task appends even when its ID sorts before the existing task");
             fork.Writer.Lock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 3, "manually forked main task counts separately");
+            Assert(monitor.ReadTasks(CancellationToken.None).Select(task => task.ThreadId).SequenceEqual(new[] { main.Id, second.Id, fork.Id }),
+                "additional work stays at the outer edge without moving existing icons");
             File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"active"}}""" + "\n");
             Assert(monitor.ReadCount(CancellationToken.None) == 2, "main completion clears its count even while helpers remain active");
+            Assert(monitor.ReadTasks(CancellationToken.None).Select(task => task.ThreadId).SequenceEqual(new[] { second.Id, fork.Id }),
+                "completion removes its icon without reordering other tasks");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"resumed"}}""" + "\n");
+            Assert(monitor.ReadTasks(CancellationToken.None).Select(task => task.ThreadId).SequenceEqual(new[] { second.Id, fork.Id, main.Id }),
+                "a resumed task joins the outer edge as new work");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"resumed"}}""" + "\n");
             second.Writer.Unlock(0, 1);
             fork.Writer.Unlock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 0, "only running subagents cannot leave a visible main-task count");
@@ -267,9 +276,9 @@ internal static class SelfTest
         }
 
         (string Id, string Rollout, FileStream Writer) AddTask(object source, string? parent = null,
-            string? forkedFrom = null, bool acquireLock = true)
+            string? forkedFrom = null, bool acquireLock = true, string? idOverride = null)
         {
-            var id = Guid.NewGuid().ToString();
+            var id = idOverride ?? Guid.NewGuid().ToString();
             var lockPath = Path.Combine(locks.FullName, id + ".lock");
             var rollout = Path.Combine(sessions.FullName, $"rollout-2026-10-13T00-00-00-{id}.jsonl");
             var metadata = JsonSerializer.Serialize(new
@@ -367,35 +376,35 @@ internal static class SelfTest
     {
         Color?[] colors = [ProjectColorMap.ParseColor("green"), ProjectColorMap.ParseColor("yellow"), null];
         ProjectMarker?[] markers = [ProjectMarker.Folder, new("plane"), new("wrench")];
-        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
-            foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
-                foreach (var style in Enum.GetValues<LoadingIconStyle>())
-                    foreach (var showMarkers in new[] { false, true })
-                        foreach (var colorLoadingIcons in new[] { false, true })
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+            foreach (var style in Enum.GetValues<LoadingIconStyle>())
+                foreach (var showMarkers in new[] { false, true })
+                    foreach (var colorLoadingIcons in new[] { false, true })
+                    {
+                        var width = AgentIndicatorRenderer.WidthFor(3, AgentIndicatorMode.RepeatedIcons);
+                        using var actual = new Bitmap(width, 42);
+                        using var expected = new Bitmap(width, 42);
+                        using (var graphics = Graphics.FromImage(actual))
                         {
-                            var width = AgentIndicatorRenderer.WidthFor(3, size, AgentIndicatorMode.RepeatedIcons);
-                            using var actual = new Bitmap(width, 42);
-                            using var expected = new Bitmap(width, 42);
-                            using (var graphics = Graphics.FromImage(actual))
-                            {
-                                AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 3, style, 0.25f,
-                                    size, AgentIndicatorMode.RepeatedIcons, side, synchronizeAnimations: true, projectColors: colors,
-                                    projectMarkers: showMarkers ? markers : null, colorLoadingIcons: colorLoadingIcons);
-                            }
-                            using (var graphics = Graphics.FromImage(expected))
-                            {
-                                graphics.TranslateTransform(0, 21);
-                                graphics.ScaleTransform(AgentIndicatorRenderer.ScaleFor(size), AgentIndicatorRenderer.ScaleFor(size));
-                                for (var index = 0; index < 3; index++)
-                                {
-                                    var x = (int)AgentIndicatorRenderer.IconXFor(index, 3, side) - 8;
-                                    AgentIndicatorRenderer.Draw(graphics, new Rectangle(x, -21, 32, 42), 1, style, 0.25f,
-                                        mode: AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true, projectColors: [colors[index]],
-                                        projectMarkers: showMarkers ? [markers[index]] : null, colorLoadingIcons: colorLoadingIcons);
-                                }
-                            }
-                            AssertSamePixels(expected, actual, "per-task colors follow their icons on either side at every size and style");
+                            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 3, style, 0.25f,
+                                AgentIndicatorMode.RepeatedIcons, side, synchronizeAnimations: true, projectColors: colors,
+                                projectMarkers: showMarkers ? markers : null, colorLoadingIcons: colorLoadingIcons);
                         }
+                        using (var graphics = Graphics.FromImage(expected))
+                        {
+                            for (var index = 0; index < 3; index++)
+                            {
+                                var state = graphics.Save();
+                                var x = (AgentIndicatorRenderer.IconXFor(index, 3, side) - 8) * AgentIndicatorRenderer.Scale;
+                                graphics.TranslateTransform(x, 0);
+                                AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 32, 42), 1, style, 0.25f,
+                                    mode: AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true, projectColors: [colors[index]],
+                                    projectMarkers: showMarkers ? [markers[index]] : null, colorLoadingIcons: colorLoadingIcons);
+                                graphics.Restore(state);
+                            }
+                        }
+                        AssertSamePixels(expected, actual, "per-task colors follow their icons on either side in every style");
+                    }
 
         using var neutral = new Bitmap(60, 42);
         using var withColors = new Bitmap(60, 42);
@@ -441,10 +450,11 @@ internal static class SelfTest
         using var plainIcon = widget.RenderPreview(Color.Black);
         AssertSamePixels(badgesOff, plainIcon, "switching off both project options restores the original loading icon");
 
-        using var badgeFrame = new Bitmap(40, 42);
+        var indicatorWidth = AgentIndicatorRenderer.WidthFor(1, AgentIndicatorMode.RepeatedIcons);
+        using var badgeFrame = new Bitmap(indicatorWidth + 8, 42);
         using (var graphics = Graphics.FromImage(badgeFrame))
         {
-            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 32, 42), 1, LoadingIconStyle.Arc, 0.25f,
+            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, indicatorWidth, 42), 1, LoadingIconStyle.Arc, 0.25f,
                 mode: AgentIndicatorMode.RepeatedIcons, projectColors: [colors[0]], projectMarkers: [ProjectMarker.Folder], colorLoadingIcons: false);
         }
         var greenBadge = false;
@@ -453,9 +463,9 @@ internal static class SelfTest
             for (var y = 0; y < badgeFrame.Height; y++)
             {
                 var pixel = badgeFrame.GetPixel(x, y);
-                if (x >= 21 && y < 17) { greenBadge |= pixel.G > pixel.R * 2 && pixel.G > pixel.B; }
-                if (x < 21 && y >= 14) { blueLoader |= pixel.B > pixel.G && pixel.G > pixel.R; }
-                Assert(x < 32 || pixel.A == 0, "project badge fits within the existing indicator width");
+                if (x >= 26 && y < 19) { greenBadge |= pixel.G > pixel.R * 2 && pixel.G > pixel.B; }
+                if (x < 26 && y >= 14) { blueLoader |= pixel.B > pixel.G && pixel.G > pixel.R; }
+                Assert(x < indicatorWidth || pixel.A == 0, "project badge fits within the existing indicator width");
             }
         Assert(greenBadge && blueLoader, "badge keeps the project color independently of the loading-icon color switch");
 
@@ -474,6 +484,7 @@ internal static class SelfTest
                     tinted |= pixel.G > pixel.R * 2 && pixel.G > pixel.B;
                 }
             Assert(tinted, $"{marker.Value} draws a visible project-colored marker");
+            Assert(bitmap.GetPixel(0, 0).A == 0, "project symbols have no badge background");
         }
 
         static bool SamePixels(Bitmap first, Bitmap second)
@@ -494,6 +505,77 @@ internal static class SelfTest
                     Assert(expected.GetPixel(x, y) == actual.GetPixel(x, y), message);
                 }
         }
+    }
+
+    private static void VerifyDesktopProjectIcons()
+    {
+        const string hole = """<path fill-rule="evenodd" d="M1 1H15V15H1Z M5 5H11V11H5Z"/>""";
+        var vector = ProjectVectorIcon.Parse(hole);
+        using var bitmap = new Bitmap(16, 16);
+        using (var graphics = Graphics.FromImage(bitmap))
+        {
+            using var brush = new SolidBrush(Color.Lime);
+            vector.Draw(graphics, brush);
+        }
+        Assert(bitmap.GetPixel(2, 2).A > 0 && bitmap.GetPixel(8, 8).A == 0,
+            "desktop filled paths preserve transparent holes rather than drawing an outline approximation");
+        using var relativeBitmap = new Bitmap(16, 16);
+        using (var graphics = Graphics.FromImage(relativeBitmap))
+        {
+            using var brush = new SolidBrush(Color.Lime);
+            ProjectVectorIcon.Parse("""<path fill-rule="evenodd" d="m1 1h14v14h-14z m4 4h6v6h-6z"/>""").Draw(graphics, brush);
+        }
+        for (var x = 0; x < 16; x++)
+            for (var y = 0; y < 16; y++)
+            {
+                Assert(bitmap.GetPixel(x, y) == relativeBitmap.GetPixel(x, y), "absolute and relative vector coordinates render identically");
+            }
+        var quote = ((char)96).ToString();
+        var initial = "folder:{legacy:folderVector},plane:{legacy:planeVector};" +
+            Component("folderVector") + Component("planeVector");
+        var shared = $"name:{quote}wrench-light-16{quote},body:{quote}{hole}{quote}";
+        var icons = DesktopProjectIcons.Extract(initial, shared);
+        Assert(icons.Count == 3 && icons.ContainsKey("folder") && icons.ContainsKey("plane") && icons.ContainsKey("wrench"),
+            "desktop asset extraction resolves sidebar fallback, legacy, and 16px preset shapes without evaluating JavaScript");
+        Assert(DesktopProjectIcons.Extract("", "").Count == 0, "unavailable desktop assets allow built-in fallback");
+        var invalid = false;
+        try { ProjectVectorIcon.Parse("""<path d="M1 1A2 2 0 0 0 4 4"/>"""); }
+        catch (FormatException) { invalid = true; }
+        Assert(invalid, "unsupported future SVG commands fail safely instead of drawing a misleading shape");
+
+        var initialBytes = System.Text.Encoding.UTF8.GetBytes(initial);
+        var sharedBytes = System.Text.Encoding.UTF8.GetBytes(shared);
+        var entries = new Dictionary<string, object>
+        {
+            ["app-initial-fixture.js"] = new { size = initialBytes.Length, offset = "0" },
+            ["app-shared-fixture.js"] = new { size = sharedBytes.Length, offset = initialBytes.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) }
+        };
+        var json = JsonSerializer.SerializeToUtf8Bytes(new { files = new { webview = new { files = new { assets = new { files = entries } } } } });
+        var archivePath = Path.Combine(Path.GetTempPath(), "CodexTray-vectors-" + Guid.NewGuid() + ".asar");
+        try
+        {
+            using (var writer = new BinaryWriter(File.Create(archivePath)))
+            {
+                writer.Write(4);
+                writer.Write(json.Length + 8);
+                writer.Write(json.Length + 4);
+                writer.Write(json.Length);
+                writer.Write(json);
+                writer.Write(initialBytes);
+                writer.Write(sharedBytes);
+            }
+            Assert(DesktopProjectIcons.LoadArchive(archivePath).Count == 3,
+                "ASAR index offsets resolve the desktop assets from a synthetic archive");
+            File.WriteAllBytes(archivePath, [4, 0, 0, 0, 255, 255, 255, 127]);
+            invalid = false;
+            try { DesktopProjectIcons.LoadArchive(archivePath); }
+            catch (InvalidDataException) { invalid = true; }
+            Assert(invalid, "invalid archive sizes are rejected before allocating asset buffers");
+        }
+        finally { File.Delete(archivePath); }
+
+        string Component(string id) =>
+            $"{id}=e=>({{viewBox:{quote}0 0 16 16{quote},children:jsx({quote}path{quote},{{d:{quote}M1 1H15V15H1Z{quote},fillRule:{quote}evenodd{quote}}})}});function next(){{}}";
     }
 
     private static void VerifyAgentIndicator()
@@ -527,7 +609,7 @@ internal static class SelfTest
             "invalid loading style falls back to arc");
         Assert(WidgetSettings.ParseEnum<AgentIndicatorPosition>(null, AgentIndicatorPosition.Right) == AgentIndicatorPosition.Right,
             "counter defaults to right");
-        VerifyAgentSizesAndModes();
+        VerifyAgentModes();
         using var menu = new ContextMenuStrip();
         using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
         foreach (var labelPosition in Enum.GetValues<LabelPosition>())
@@ -557,78 +639,71 @@ internal static class SelfTest
         Assert(widget.AgentCounterWidth == 0 && widget.ClientSize.Width == disabledWidth, "disabled counter stays hidden during activity");
     }
 
-    private static void VerifyAgentSizesAndModes()
+    private static void VerifyAgentModes()
     {
-        Assert(AgentIndicatorRenderer.ScaleFor(AgentIndicatorSize.Small) == 0.7f &&
-            AgentIndicatorRenderer.ScaleFor(AgentIndicatorSize.Normal) == 1f &&
-            AgentIndicatorRenderer.ScaleFor(AgentIndicatorSize.Large) == 1.3f, "requested size ratios");
-        Assert(WidgetSettings.ParseEnum<AgentIndicatorSize>(null, AgentIndicatorSize.Normal) == AgentIndicatorSize.Normal,
-            "existing installations default to normal size");
+        Assert(AgentIndicatorRenderer.Scale == 1.3f, "all working-agent icons use the former large size");
         Assert(WidgetSettings.ParseEnum<AgentIndicatorMode>("invalid", AgentIndicatorMode.IconAndNumber) == AgentIndicatorMode.IconAndNumber,
             "existing installations keep icon and number");
         Assert(AgentIndicatorRenderer.IconXFor(0, 2, AgentIndicatorPosition.Right) == AgentIndicatorRenderer.IconXFor(0, 1, AgentIndicatorPosition.Right),
             "right-side additional icons grow right");
         Assert(AgentIndicatorRenderer.IconXFor(1, 2, AgentIndicatorPosition.Right) > AgentIndicatorRenderer.IconXFor(0, 2, AgentIndicatorPosition.Right),
             "right-side icons have positive spacing");
-        Assert(AgentIndicatorRenderer.IconXFor(0, 2, AgentIndicatorPosition.Left) - AgentIndicatorRenderer.WidthFor(2, mode: AgentIndicatorMode.RepeatedIcons) ==
-            AgentIndicatorRenderer.IconXFor(0, 1, AgentIndicatorPosition.Left) - AgentIndicatorRenderer.WidthFor(1, mode: AgentIndicatorMode.RepeatedIcons),
+        Assert(Math.Abs((AgentIndicatorRenderer.IconXFor(0, 2, AgentIndicatorPosition.Left) * AgentIndicatorRenderer.Scale - AgentIndicatorRenderer.WidthFor(2, mode: AgentIndicatorMode.RepeatedIcons)) -
+            (AgentIndicatorRenderer.IconXFor(0, 1, AgentIndicatorPosition.Left) * AgentIndicatorRenderer.Scale - AgentIndicatorRenderer.WidthFor(1, mode: AgentIndicatorMode.RepeatedIcons))) < 0.001f,
             "left-side nearest icon remains anchored to controls");
         Assert(AgentIndicatorRenderer.IconXFor(1, 2, AgentIndicatorPosition.Left) < AgentIndicatorRenderer.IconXFor(0, 2, AgentIndicatorPosition.Left),
             "left-side additional icons grow left");
 
         using var menu = new ContextMenuStrip();
         using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
-        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
-            foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
-                foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
-                    foreach (var style in Enum.GetValues<LoadingIconStyle>())
-                    {
-                        widget.SetWorkingAgentCount(0);
-                        var idleWidth = widget.ClientSize.Width;
-                        widget.ApplyAgentSettings(true, false, style, side, size, mode);
-                        widget.SetWorkingAgentCount(2);
-                        using var preview = widget.RenderPreview(Color.FromArgb(31, 31, 31));
-                        Assert(widget.ClientSize.Width == idleWidth + AgentIndicatorRenderer.WidthFor(2, size, mode), "size and mode reserve correct space");
-                        widget.SetWorkingAgentCount(0);
-                        Assert(widget.ClientSize.Width == idleWidth, "every size and mode collapses when idle");
-                    }
+        foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
+            foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+                foreach (var style in Enum.GetValues<LoadingIconStyle>())
+                {
+                    widget.SetWorkingAgentCount(0);
+                    var idleWidth = widget.ClientSize.Width;
+                    widget.ApplyAgentSettings(true, false, style, side, mode);
+                    widget.SetWorkingAgentCount(2);
+                    using var preview = widget.RenderPreview(Color.FromArgb(31, 31, 31));
+                    Assert(widget.ClientSize.Width == idleWidth + AgentIndicatorRenderer.WidthFor(2, mode), "display mode reserves correct space");
+                    widget.SetWorkingAgentCount(0);
+                    Assert(widget.ClientSize.Width == idleWidth, "every display mode collapses when idle");
+                }
 
         // A repeated two-icon render must contain exactly those two icon images,
         // including the gap, with no number painted into the remaining space.
-        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
-            foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
-                foreach (var synchronized in new[] { false, true })
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+            foreach (var synchronized in new[] { false, true })
+            {
+                var width = AgentIndicatorRenderer.WidthFor(2, AgentIndicatorMode.RepeatedIcons);
+                using var actual = new Bitmap(width, 42);
+                using var expected = new Bitmap(width, 42);
+                using (var graphics = Graphics.FromImage(actual))
                 {
-                    var width = AgentIndicatorRenderer.WidthFor(2, size, AgentIndicatorMode.RepeatedIcons);
-                    using var actual = new Bitmap(width, 42);
-                    using var expected = new Bitmap(width, 42);
-                    using (var graphics = Graphics.FromImage(actual))
-                    {
-                        AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 2, LoadingIconStyle.Robot, 0.25f,
-                            size, AgentIndicatorMode.RepeatedIcons, side, synchronized);
-                    }
-                    using (var graphics = Graphics.FromImage(expected))
-                    {
-                        graphics.TranslateTransform(0, 21);
-                        graphics.ScaleTransform(AgentIndicatorRenderer.ScaleFor(size), AgentIndicatorRenderer.ScaleFor(size));
-                        for (var index = 0; index < 2; index++)
-                        {
-                            // Draw a normal single icon into a clipped area excluding its count.
-                            var state = graphics.Save();
-                            var x = AgentIndicatorRenderer.IconXFor(index, 2, side) - 6;
-                            graphics.SetClip(new RectangleF(x, -16, 26, 32));
-                            AgentIndicatorRenderer.Draw(graphics, new Rectangle((int)x, -21, 42, 42), 1,
-                                LoadingIconStyle.Robot, synchronized ? 0.25f : 0.25f + index * 0.08f);
-                            graphics.Restore(state);
-                        }
-                    }
-                    for (var x = 0; x < width; x++)
-                        for (var y = 0; y < 42; y++)
-                        {
-                            Assert(actual.GetPixel(x, y) == expected.GetPixel(x, y),
-                                "repeated mode draws the selected synchronized or staggered icon phases without a number");
-                        }
+                    AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 2, LoadingIconStyle.Robot, 0.25f,
+                        AgentIndicatorMode.RepeatedIcons, side, synchronized);
                 }
+                using (var graphics = Graphics.FromImage(expected))
+                {
+                    for (var index = 0; index < 2; index++)
+                    {
+                        // Draw a normal single icon into a clipped area excluding its count.
+                        var state = graphics.Save();
+                        var x = (AgentIndicatorRenderer.IconXFor(index, 2, side) - 6) * AgentIndicatorRenderer.Scale;
+                        graphics.TranslateTransform(x, 0);
+                        graphics.SetClip(new RectangleF(0, 0, 26 * AgentIndicatorRenderer.Scale, 42));
+                        AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 42, 42), 1,
+                            LoadingIconStyle.Robot, synchronized ? 0.25f : 0.25f + index * 0.08f);
+                        graphics.Restore(state);
+                    }
+                }
+                for (var x = 0; x < width; x++)
+                    for (var y = 0; y < 42; y++)
+                    {
+                        Assert(actual.GetPixel(x, y) == expected.GetPixel(x, y),
+                            "repeated mode draws the selected synchronized or staggered icon phases without a number");
+                    }
+            }
     }
 
     private static void VerifyStartupTask()

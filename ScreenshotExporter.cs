@@ -60,7 +60,7 @@ internal static class ScreenshotExporter
 
     private static void RenderProjectColorGallery(string outputDirectory, UsageSnapshot snapshot, bool showProjectIcons = false)
     {
-        using var gallery = new Bitmap(680, 360);
+        using var gallery = new Bitmap(840, 360);
         using var graphics = Graphics.FromImage(gallery);
         graphics.Clear(Color.FromArgb(20, 20, 22));
         using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -79,7 +79,7 @@ internal static class ScreenshotExporter
             {
                 var colored = column == 1;
                 var side = row == 0 ? AgentIndicatorPosition.Right : AgentIndicatorPosition.Left;
-                var card = new Rectangle(12 + column * 334, 70 + row * 138, 322, 126);
+                var card = new Rectangle(12 + column * 414, 70 + row * 138, 402, 126);
                 using var background = new SolidBrush(TaskbarColor);
                 graphics.FillRectangle(background, card);
                 graphics.DrawString($"Project colors {(colored ? "on" : "off")} · {side.ToString().ToLowerInvariant()}",
@@ -99,31 +99,28 @@ internal static class ScreenshotExporter
 
     private static void RenderAgentLayoutGallery(string outputDirectory, UsageSnapshot snapshot)
     {
-        using var gallery = new Bitmap(1080, 500);
+        using var gallery = new Bitmap(840, 360);
         using var graphics = Graphics.FromImage(gallery);
         graphics.Clear(Color.FromArgb(20, 20, 22));
         using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
         using var captionFont = new Font("Segoe UI", 9);
         using var text = new SolidBrush(Color.White);
-        graphics.DrawString("Working agents · sizes and display modes", titleFont, text, 18, 12);
-        graphics.DrawString("Three main tasks · icons grow outward from the battery controls", captionFont, text, 18, 40);
-        AgentIndicatorSize[] sizes = [AgentIndicatorSize.Small, AgentIndicatorSize.Normal, AgentIndicatorSize.Large];
-        for (var row = 0; row < 3; row++)
-            for (var column = 0; column < sizes.Length; column++)
+        graphics.DrawString("Working agents · display modes", titleFont, text, 18, 12);
+        graphics.DrawString("Fixed large size · three main tasks · icons grow outward", captionFont, text, 18, 40);
+        for (var row = 0; row < 2; row++)
+            for (var column = 0; column < 2; column++)
             {
-                var size = sizes[column];
-                var mode = row == 0 ? AgentIndicatorMode.IconAndNumber : AgentIndicatorMode.RepeatedIcons;
-                var side = row == 2 ? AgentIndicatorPosition.Left : AgentIndicatorPosition.Right;
-                var card = new Rectangle(12 + column * 356, 70 + row * 142, 344, 130);
+                var mode = column == 0 ? AgentIndicatorMode.IconAndNumber : AgentIndicatorMode.RepeatedIcons;
+                var side = row == 0 ? AgentIndicatorPosition.Right : AgentIndicatorPosition.Left;
+                var card = new Rectangle(12 + column * 414, 70 + row * 138, 402, 126);
                 using var background = new SolidBrush(TaskbarColor);
                 graphics.FillRectangle(background, card);
-                var sizeTitle = $"{size} ({AgentIndicatorRenderer.ScaleFor(size):P0})";
-                var modeTitle = row == 0 ? "Icon + number" : $"Icons · {side.ToString().ToLowerInvariant()}";
-                graphics.DrawString($"{sizeTitle} · {modeTitle}", captionFont, text, card.X + 12, card.Y + 8);
+                var modeTitle = column == 0 ? "Icon + number" : "One icon per task";
+                graphics.DrawString($"{modeTitle} · {side.ToString().ToLowerInvariant()}", captionFont, text, card.X + 12, card.Y + 8);
                 using var menu = new ContextMenuStrip();
                 using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
                 widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
-                widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, size, mode);
+                widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, mode);
                 widget.SetSnapshot(snapshot);
                 widget.SetWorkingAgentCount(3);
                 using var preview = widget.RenderPreview(TaskbarColor, 1.6f);

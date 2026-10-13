@@ -10,6 +10,7 @@ internal sealed class AgentActivityMonitor
     private readonly ProjectColorReader _projectColors;
     private readonly Dictionary<string, string> _rollouts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ActivityState> _states = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _workingOrder = [];
     private long _nextDiscovery;
 
     public AgentActivityMonitor(string? home = null)
@@ -27,6 +28,7 @@ internal sealed class AgentActivityMonitor
         if (!Directory.Exists(lockDirectory))
         {
             _states.Clear();
+            _workingOrder.Clear();
             return Array.Empty<WorkingTask>();
         }
 
@@ -94,7 +96,14 @@ internal sealed class AgentActivityMonitor
             }
         }
 
-        return tasks;
+        var byId = tasks.ToDictionary(task => task.ThreadId, StringComparer.OrdinalIgnoreCase);
+        _workingOrder.RemoveAll(id => !byId.ContainsKey(id));
+        var known = _workingOrder.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var task in tasks)
+        {
+            if (known.Add(task.ThreadId)) { _workingOrder.Add(task.ThreadId); }
+        }
+        return _workingOrder.Select(id => byId[id]).ToArray();
     }
 
     internal static bool IsWriterAlive(string path)
