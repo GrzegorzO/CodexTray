@@ -11,6 +11,8 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Keep the tray icon available when no startup task exists and the COM binder
+  reports the missing task as a FileNotFoundException
 - Replace one-shot Startup-folder registration with a per-user logon task and
   startup supervisor that retries failures, runs on battery power, and has no
   execution time limit; a normal Exit stops both processes

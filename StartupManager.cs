@@ -127,14 +127,16 @@ internal static class StartupManager
                 }))).ToString();
     }
 
-    private static object? FindTask(dynamic folder)
+    internal static object? FindTask(dynamic folder)
     {
         try
         {
             return folder.GetTask(TaskName);
         }
-        catch (COMException exception) when (exception.HResult == FileNotFound)
+        catch (Exception exception) when (
+            exception is COMException or FileNotFoundException && exception.HResult == FileNotFound)
         {
+            // The dynamic COM binder can translate a missing task into FileNotFoundException.
             return null;
         }
     }
