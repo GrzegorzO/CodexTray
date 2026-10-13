@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -10,6 +11,7 @@ internal static class SelfTest
         try
         {
             VerifyStartupTask();
+            VerifyStartupTaskLookup();
             VerifyStartupRecovery();
             using var document = JsonDocument.Parse("""
                 {
@@ -108,6 +110,51 @@ internal static class SelfTest
             (bool?)settings.Element(ns + "StopIfGoingOnBatteries") == false, "startup works on battery power");
         Assert((int?)settings.Element(ns + "RestartOnFailure")!.Element(ns + "Count") == 3 &&
             (string?)settings.Element(ns + "RestartOnFailure")!.Element(ns + "Interval") == "PT1M", "startup failures receive bounded retries");
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2201:Do not raise reserved exception types",
+        Justification = "Simulates the Task Scheduler COM failures handled by the production lookup.")]
+    private static void VerifyStartupTaskLookup()
+    {
+        const int fileNotFound = unchecked((int)0x80070002);
+        const int accessDenied = unchecked((int)0x80070005);
+        var task = new object();
+        Assert(ReferenceEquals(StartupManager.FindTask(new TaskFolderStub(task)), task), "existing startup task is returned");
+        Assert(StartupManager.FindTask(new TaskFolderStub(exception: new COMException("Missing task", fileNotFound))) is null,
+            "missing startup task reported by COM is absent");
+        Assert(StartupManager.FindTask(new TaskFolderStub(exception: new FileNotFoundException("Missing task"))) is null,
+            "missing startup task reported by the dynamic COM binder is absent");
+
+        VerifyLookupFailure(new COMException("Access denied", accessDenied));
+        VerifyLookupFailure(new FileNotFoundException("Unexpected HRESULT") { HResult = accessDenied });
+        VerifyLookupFailure(new IOException("Unrelated I/O failure"));
+
+        static void VerifyLookupFailure(Exception failure)
+        {
+            try
+            {
+                StartupManager.FindTask(new TaskFolderStub(exception: failure));
+            }
+            catch (Exception exception) when (ReferenceEquals(exception, failure))
+            {
+                return;
+            }
+
+            Assert(false, "unrelated startup task lookup errors propagate");
+        }
+    }
+
+    internal sealed class TaskFolderStub(object? task = null, Exception? exception = null)
+    {
+        public object? GetTask(string name)
+        {
+            if (exception is not null)
+            {
+                throw exception;
+            }
+
+            return task;
+        }
     }
 
     private static void VerifyStartupRecovery()
