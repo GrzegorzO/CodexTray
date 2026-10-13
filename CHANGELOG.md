@@ -7,6 +7,8 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Independently switchable project icon badges at the upper-right of repeated
+  loading icons, always using their project color
 - Optional project colors in One icon per task mode, with saved preferences,
   stable task/color ordering, automatic recoloring, and normal-blue fallback
 - Purple battery color for the final 5% of remaining usage

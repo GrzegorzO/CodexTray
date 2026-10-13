@@ -228,7 +228,9 @@ internal static class SelfTest
             WriteAppearance("green");
             var colored = monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single();
             Assert(colored.ThreadId == main.Id && colored.ProjectColor == ProjectColorMap.ParseColor("green"), "color belongs to the main task, not its helpers");
+            Assert(colored.ProjectMarker == new ProjectMarker("plane"), "project marker belongs to the same main task");
             Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectColor is null, "project metadata is optional when colors are off");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectMarker is null, "project markers are not read when both options are off");
             WriteAppearance("red");
             Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ProjectColor == ProjectColorMap.ParseColor("red"),
                 "project recoloring updates without restarting a main task");
@@ -294,7 +296,7 @@ internal static class SelfTest
             };
             File.WriteAllText(appearancePath, JsonSerializer.Serialize(new Dictionary<string, object>
             {
-                ["project-appearances"] = new Dictionary<string, object> { ["main-project"] = new { color } },
+                ["project-appearances"] = new Dictionary<string, object> { ["main-project"] = new { color, marker = new { kind = "icon", icon = "plane" } } },
                 ["thread-project-assignments"] = assignments
             }));
         }
@@ -305,7 +307,7 @@ internal static class SelfTest
         using var document = JsonDocument.Parse("""
             {
               "project-appearances": {
-                "main-project": { "color": "green" },
+                "main-project": { "color": "green", "marker": { "kind": "icon", "icon": "plane" } },
                 "nested-project": { "color": "yellow" },
                 "other-project": { "color": "red" },
                 "default-project": { "color": "black" }
@@ -332,6 +334,15 @@ internal static class SelfTest
         var green = ProjectColorMap.ParseColor("green");
         Assert(map.Resolve("assigned", @"C:\Projects\Other") == green, "explicit project assignment wins over working directory");
         Assert(map.Resolve("canonical", null) == green, "migrated project IDs resolve legacy appearance colors");
+        Assert(map.ResolveMarker("canonical", null) == new ProjectMarker("plane"), "migrated project IDs resolve their marker");
+        Assert(map.ResolveMarker("worktree", @"C:\Worktrees\Detached") == new ProjectMarker("plane"), "worktree marker follows the project assignment");
+        Assert(map.ResolveMarker("default", null) == ProjectMarker.Folder, "known projects without marker metadata get a folder badge");
+        Assert(map.ResolveMarker("projectless", @"C:\Projects\Main") is null && map.ResolveMarker("missing", null) is null,
+            "unmatched and projectless tasks have no misleading project badge");
+        using var emojiMarker = JsonDocument.Parse("""{"kind":"emoji","emoji":"🌱"}""");
+        Assert(ProjectColorMap.ParseMarker(emojiMarker.RootElement) == new ProjectMarker("🌱", IsEmoji: true), "emoji project markers are retained");
+        using var invalidMarker = JsonDocument.Parse("""{"kind":"emoji","emoji":"\n"}""");
+        Assert(ProjectColorMap.ParseMarker(invalidMarker.RootElement) == ProjectMarker.Folder, "invalid markers use a safe folder fallback");
         Assert(map.Resolve("unassigned", @"c:\PROJECTS\main\src") == green, "project roots match Windows paths case-insensitively");
         Assert(map.Resolve("unassigned", @"C:\Projects\Main\Nested\src") == ProjectColorMap.ParseColor("yellow"), "longest matching project root wins");
         Assert(map.Resolve("unassigned", @"C:\Projects\Main-other") is null, "sibling directory cannot inherit another project's color");
@@ -355,31 +366,36 @@ internal static class SelfTest
     private static void VerifyProjectColorRendering()
     {
         Color?[] colors = [ProjectColorMap.ParseColor("green"), ProjectColorMap.ParseColor("yellow"), null];
+        ProjectMarker?[] markers = [ProjectMarker.Folder, new("plane"), new("wrench")];
         foreach (var size in Enum.GetValues<AgentIndicatorSize>())
             foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
                 foreach (var style in Enum.GetValues<LoadingIconStyle>())
-                {
-                    var width = AgentIndicatorRenderer.WidthFor(3, size, AgentIndicatorMode.RepeatedIcons);
-                    using var actual = new Bitmap(width, 42);
-                    using var expected = new Bitmap(width, 42);
-                    using (var graphics = Graphics.FromImage(actual))
-                    {
-                        AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 3, style, 0.25f,
-                            size, AgentIndicatorMode.RepeatedIcons, side, synchronizeAnimations: true, projectColors: colors);
-                    }
-                    using (var graphics = Graphics.FromImage(expected))
-                    {
-                        graphics.TranslateTransform(0, 21);
-                        graphics.ScaleTransform(AgentIndicatorRenderer.ScaleFor(size), AgentIndicatorRenderer.ScaleFor(size));
-                        for (var index = 0; index < 3; index++)
+                    foreach (var showMarkers in new[] { false, true })
+                        foreach (var colorLoadingIcons in new[] { false, true })
                         {
-                            var x = (int)AgentIndicatorRenderer.IconXFor(index, 3, side) - 8;
-                            AgentIndicatorRenderer.Draw(graphics, new Rectangle(x, -21, 32, 42), 1, style, 0.25f,
-                                mode: AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true, projectColors: [colors[index]]);
+                            var width = AgentIndicatorRenderer.WidthFor(3, size, AgentIndicatorMode.RepeatedIcons);
+                            using var actual = new Bitmap(width, 42);
+                            using var expected = new Bitmap(width, 42);
+                            using (var graphics = Graphics.FromImage(actual))
+                            {
+                                AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 3, style, 0.25f,
+                                    size, AgentIndicatorMode.RepeatedIcons, side, synchronizeAnimations: true, projectColors: colors,
+                                    projectMarkers: showMarkers ? markers : null, colorLoadingIcons: colorLoadingIcons);
+                            }
+                            using (var graphics = Graphics.FromImage(expected))
+                            {
+                                graphics.TranslateTransform(0, 21);
+                                graphics.ScaleTransform(AgentIndicatorRenderer.ScaleFor(size), AgentIndicatorRenderer.ScaleFor(size));
+                                for (var index = 0; index < 3; index++)
+                                {
+                                    var x = (int)AgentIndicatorRenderer.IconXFor(index, 3, side) - 8;
+                                    AgentIndicatorRenderer.Draw(graphics, new Rectangle(x, -21, 32, 42), 1, style, 0.25f,
+                                        mode: AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true, projectColors: [colors[index]],
+                                        projectMarkers: showMarkers ? [markers[index]] : null, colorLoadingIcons: colorLoadingIcons);
+                                }
+                            }
+                            AssertSamePixels(expected, actual, "per-task colors follow their icons on either side at every size and style");
                         }
-                    }
-                    AssertSamePixels(expected, actual, "per-task colors follow their icons on either side at every size and style");
-                }
 
         using var neutral = new Bitmap(60, 42);
         using var withColors = new Bitmap(60, 42);
@@ -389,13 +405,14 @@ internal static class SelfTest
         }
         using (var graphics = Graphics.FromImage(withColors))
         {
-            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 60, 42), 3, LoadingIconStyle.Robot, 0.25f, projectColors: colors);
+            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 60, 42), 3, LoadingIconStyle.Robot, 0.25f,
+                projectColors: colors, projectMarkers: markers);
         }
         AssertSamePixels(neutral, withColors, "icon and number mode always keeps its normal color");
 
         using var menu = new ContextMenuStrip();
         using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
-        Assert(!widget.UseProjectColors, "project colors are opt-in");
+        Assert(!widget.UseProjectColors && !widget.ShowProjectIcons, "project colors and badges are independently opt-in");
         widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right,
             mode: AgentIndicatorMode.RepeatedIcons, useProjectColors: true);
         widget.SetWorkingTasks([new WorkingTask("main", null, colors[0])]);
@@ -409,6 +426,65 @@ internal static class SelfTest
                 changed |= before.GetPixel(x, y) != after.GetPixel(x, y);
             }
         Assert(changed, "same-count project recoloring repaints the widget");
+
+        widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right,
+            mode: AgentIndicatorMode.RepeatedIcons, showProjectIcons: true);
+        widget.SetWorkingTasks([new WorkingTask("main", null, colors[0], ProjectMarker.Folder)]);
+        using var folderBadge = widget.RenderPreview(Color.Black);
+        widget.SetWorkingTasks([new WorkingTask("main", null, colors[0], new ProjectMarker("plane"))]);
+        using var planeBadge = widget.RenderPreview(Color.Black);
+        Assert(!SamePixels(folderBadge, planeBadge), "marker-only updates repaint with unchanged count and color");
+        widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right,
+            mode: AgentIndicatorMode.RepeatedIcons);
+        using var badgesOff = widget.RenderPreview(Color.Black);
+        widget.SetWorkingAgentCount(1);
+        using var plainIcon = widget.RenderPreview(Color.Black);
+        AssertSamePixels(badgesOff, plainIcon, "switching off both project options restores the original loading icon");
+
+        using var badgeFrame = new Bitmap(40, 42);
+        using (var graphics = Graphics.FromImage(badgeFrame))
+        {
+            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 32, 42), 1, LoadingIconStyle.Arc, 0.25f,
+                mode: AgentIndicatorMode.RepeatedIcons, projectColors: [colors[0]], projectMarkers: [ProjectMarker.Folder], colorLoadingIcons: false);
+        }
+        var greenBadge = false;
+        var blueLoader = false;
+        for (var x = 0; x < badgeFrame.Width; x++)
+            for (var y = 0; y < badgeFrame.Height; y++)
+            {
+                var pixel = badgeFrame.GetPixel(x, y);
+                if (x >= 21 && y < 17) { greenBadge |= pixel.G > pixel.R * 2 && pixel.G > pixel.B; }
+                if (x < 21 && y >= 14) { blueLoader |= pixel.B > pixel.G && pixel.G > pixel.R; }
+                Assert(x < 32 || pixel.A == 0, "project badge fits within the existing indicator width");
+            }
+        Assert(greenBadge && blueLoader, "badge keeps the project color independently of the loading-icon color switch");
+
+        var namedMarkers = "folder.currency-dollar.book.graduation-cap.edit.writing.function.terminal.music.popcorn.customize.palette.stethoscope.health.lotus.suitcase.bar-chart.kettlebell.dumbbell.logs.scale.desk-globe.plane.globe.wrench.paw.flask.brain.heart.plant.unknown"
+            .Split('.').Select(value => new ProjectMarker(value));
+        foreach (var marker in namedMarkers.Append(new ProjectMarker("🌱", IsEmoji: true)))
+        {
+            using var bitmap = new Bitmap(20, 20);
+            using var graphics = Graphics.FromImage(bitmap);
+            ProjectMarkerRenderer.Draw(graphics, new RectangleF(0, 0, 20, 20), marker, colors[0]!.Value);
+            var tinted = false;
+            for (var x = 0; x < bitmap.Width; x++)
+                for (var y = 0; y < bitmap.Height; y++)
+                {
+                    var pixel = bitmap.GetPixel(x, y);
+                    tinted |= pixel.G > pixel.R * 2 && pixel.G > pixel.B;
+                }
+            Assert(tinted, $"{marker.Value} draws a visible project-colored marker");
+        }
+
+        static bool SamePixels(Bitmap first, Bitmap second)
+        {
+            for (var x = 0; x < first.Width; x++)
+                for (var y = 0; y < first.Height; y++)
+                {
+                    if (first.GetPixel(x, y) != second.GetPixel(x, y)) { return false; }
+                }
+            return true;
+        }
 
         static void AssertSamePixels(Bitmap expected, Bitmap actual, string message)
         {

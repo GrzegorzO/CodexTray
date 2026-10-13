@@ -44,15 +44,23 @@ to the existing staggered timing.
 
 `ReadTasks` retains stable thread IDs and working directories alongside each
 main task's optional project color. Task IDs define a stable icon order across
-polls. When coloring is enabled in repeated-icon mode, `ProjectColorReader`
+polls. When coloring or badges are enabled in repeated-icon mode, `ProjectColorReader`
 reads `.codex-global-state.json` with shared read access and caches only the
-project-color/assignment metadata. File timestamp and length changes trigger
+project-color/marker/assignment metadata. File timestamp and length changes trigger
 reloads; partial writes preserve the last valid mapping. Explicit project
 assignments win over workspace hints and the longest unambiguous root match.
 Projectless or unmatched tasks and unsupported/default colors use the normal
 icon accent. Palette tokens use the desktop dark-sidebar RGB values. No desktop
-state is read for coloring while the option is off or in icon-and-number mode,
+state is read for project appearance while both options are off or in icon-and-number mode,
 and no Codex settings or state files are written.
+
+Project markers travel alongside the color in `WorkingTask`. The independent
+`Show project icon` preference draws a stationary badge at the upper-right of
+each repeated icon. `ProjectMarkerRenderer` uses original simplified GDI+ paths
+for named markers and monochrome font glyphs for emoji. Badges always take the
+project accent, even when loading-icon coloring is off. Unknown markers fall
+back to folders; unmatched/projectless tasks have no badge. Badge geometry fits
+inside the existing indicator width and scales with the loading icons.
 
 ## Refresh lifecycle
 

@@ -36,6 +36,7 @@ immediately to widgets on all monitors and are saved under
 | Animate loading icon | On | Animate the selected style. Turn off for a static frame. |
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
 | Use project colors | Off | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
+| Show project icon | Off | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
 
 The indicator remains vertically centered at every size. Idle hiding is always
 applied; there is no visible zero-state icon or reserved gap.
@@ -79,6 +80,23 @@ unresolved project mappings fall back to the normal blue icon. These fallbacks
 do not remove the task from the count.
 
 ![Static previews using sample green, yellow, and purple projects](images/project-colors-gallery.png)
+
+### Project icon badges
+
+Enable **Show project icon** to add a small, stationary project marker at the
+upper-right of each repeated loading icon. It has its own saved switch and works
+independently of **Use project colors**. The badge always uses its project's color,
+even when the loading icon keeps its normal blue. Projects with default or
+unsupported colors use blue for the badge too.
+
+CodexTray draws simplified versions of the desktop's named project markers,
+including folders, planes, terminals, and wrenches. Emoji markers use a
+monochrome Windows font glyph tinted with the project color. Projects without a
+supported marker use a folder; unmatched and explicitly projectless tasks have
+no badge. Badges scale with the loading icon and retain the same task association
+on either side of the batteries. Switching them off restores the unbadged icon.
+
+![Project badges with blue and project-colored loading icons](images/project-icons-gallery.png)
 
 ### Icon styles
 
@@ -126,9 +144,9 @@ names, locking, or event format can affect detection independently of quota
 display. Remote/cloud-only work, ephemeral sessions, and other sessions without
 the required local files are not covered.
 
-When project coloring is enabled in repeated-icon mode, CodexTray also reads
+When project coloring or project badges are enabled in repeated-icon mode, CodexTray also reads
 `.codex-global-state.json` from the same Codex home directory. It interprets
-project appearances, task-project assignments, project-ID aliases, workspace
+project colors and markers, task-project assignments, project-ID aliases, workspace
 hints, and local project roots. The desktop state file is not modified. Its
 format is also an implementation detail; incompatible or unavailable color
 metadata falls back to blue. Codex CLI-only installations can still show the
@@ -152,6 +170,8 @@ Activity checks do not start a model request or consume Codex tokens.
 | Icons do not animate together | Enable **Synchronize icon animations**. It is off by default and only has a visible effect with repeated icons. |
 | Icons are static | Enable **Animate loading icon**. Animation stops while the widget is hidden or idle. |
 | Use project colors is unavailable | Select **Display mode → One icon per task** first. The option does not apply to the single icon-and-number display. |
+| Show project icon is unavailable | Select **Display mode → One icon per task** first. The switch is independent of Use project colors. |
+| No badge on an otherwise working task icon | Confirm Show project icon is enabled and the task can be matched to a local project. Unmatched and explicitly projectless tasks have no badge. |
 | A task icon remains blue with project colors enabled | Confirm the project has a supported custom color in Codex Desktop and the app state is available under the same `CODEX_HOME`. Projectless, default-colored, or unmatched tasks intentionally use blue. |
 | A widget disappears during fullscreen video | Expected on the monitor whose taskbar is covered. A visible taskbar on another monitor should retain its widget. Auto-hidden taskbars also hide their widgets. |
 | The widget flickers on another monitor during fullscreen video | Use a build containing the fullscreen flicker fix. If it persists, report monitor layout, display scaling, video/browser details, and widget settings. |

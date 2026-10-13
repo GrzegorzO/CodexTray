@@ -34,6 +34,8 @@ generated previews consistent with the implementation.
 For project colors, verify explicit assignments, worktree/root matching,
 projectless and missing-color fallbacks, live recoloring, and color association
 on both sides. Use synthetic project metadata and previews in public artifacts.
+Check that project badges can be switched independently, keep their project
+color with blue loading icons, and repaint after marker-only changes.
 
 ## Pull requests
 

@@ -48,6 +48,7 @@ internal static class ScreenshotExporter
             RenderAgentGallery(outputDirectory, snapshot);
             RenderAgentLayoutGallery(outputDirectory, snapshot);
             RenderProjectColorGallery(outputDirectory, snapshot);
+            RenderProjectColorGallery(outputDirectory, snapshot, showProjectIcons: true);
             return 0;
         }
         catch (Exception exception)
@@ -57,7 +58,7 @@ internal static class ScreenshotExporter
         }
     }
 
-    private static void RenderProjectColorGallery(string outputDirectory, UsageSnapshot snapshot)
+    private static void RenderProjectColorGallery(string outputDirectory, UsageSnapshot snapshot, bool showProjectIcons = false)
     {
         using var gallery = new Bitmap(680, 360);
         using var graphics = Graphics.FromImage(gallery);
@@ -65,13 +66,13 @@ internal static class ScreenshotExporter
         using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
         using var captionFont = new Font("Segoe UI", 9);
         using var text = new SolidBrush(Color.White);
-        graphics.DrawString("Working agents · project colors", titleFont, text, 18, 12);
+        graphics.DrawString(showProjectIcons ? "Working agents · project icon badges" : "Working agents · project colors", titleFont, text, 18, 12);
         graphics.DrawString("Three main tasks · sample green, yellow, and purple projects", captionFont, text, 18, 40);
         WorkingTask[] tasks =
         [
-            new("sample-1", null, ProjectColorMap.ParseColor("green")),
-            new("sample-2", null, ProjectColorMap.ParseColor("yellow")),
-            new("sample-3", null, ProjectColorMap.ParseColor("purple"))
+            new("sample-1", null, ProjectColorMap.ParseColor("green"), ProjectMarker.Folder),
+            new("sample-2", null, ProjectColorMap.ParseColor("yellow"), new ProjectMarker("plane")),
+            new("sample-3", null, ProjectColorMap.ParseColor("purple"), new ProjectMarker("wrench"))
         ];
         for (var row = 0; row < 2; row++)
             for (var column = 0; column < 2; column++)
@@ -87,13 +88,13 @@ internal static class ScreenshotExporter
                 using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
                 widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
                 widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side,
-                    mode: AgentIndicatorMode.RepeatedIcons, useProjectColors: colored);
+                    mode: AgentIndicatorMode.RepeatedIcons, useProjectColors: colored, showProjectIcons: showProjectIcons);
                 widget.SetSnapshot(snapshot);
                 widget.SetWorkingTasks(tasks);
                 using var preview = widget.RenderPreview(TaskbarColor, 1.6f);
                 graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 38);
             }
-        gallery.Save(Path.Combine(outputDirectory, "project-colors-gallery.png"), ImageFormat.Png);
+        gallery.Save(Path.Combine(outputDirectory, showProjectIcons ? "project-icons-gallery.png" : "project-colors-gallery.png"), ImageFormat.Png);
     }
 
     private static void RenderAgentLayoutGallery(string outputDirectory, UsageSnapshot snapshot)

@@ -79,7 +79,7 @@ internal static class AgentIndicatorRenderer
     internal static void Draw(Graphics graphics, Rectangle bounds, int count, LoadingIconStyle style, float phase,
         AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
         AgentIndicatorPosition side = AgentIndicatorPosition.Right, bool synchronizeAnimations = false,
-        IReadOnlyList<Color?>? projectColors = null)
+        IReadOnlyList<Color?>? projectColors = null, IReadOnlyList<ProjectMarker?>? projectMarkers = null, bool colorLoadingIcons = true)
     {
         if (count <= 0)
         {
@@ -94,9 +94,15 @@ internal static class AgentIndicatorRenderer
         {
             for (var index = 0; index < count; index++)
             {
-                DrawIcon(graphics, new RectangleF(IconXFor(index, count, side), -8, 16, 16),
+                var icon = new RectangleF(IconXFor(index, count, side), -8, 16, 16);
+                var color = projectColors is not null && index < projectColors.Count ? projectColors[index] : null;
+                DrawIcon(graphics, icon,
                     style, synchronizeAnimations ? phase : (phase + index * 0.08f) % 1,
-                    projectColors is not null && index < projectColors.Count ? projectColors[index] : null);
+                    colorLoadingIcons ? color : null);
+                if (projectMarkers is not null && index < projectMarkers.Count && projectMarkers[index] is { } marker)
+                {
+                    ProjectMarkerRenderer.Draw(graphics, new RectangleF(icon.Right - 3, icon.Top - 6, 10, 10), marker, color ?? DefaultColor);
+                }
             }
         }
         else

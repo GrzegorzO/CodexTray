@@ -82,7 +82,8 @@ internal sealed class AgentActivityMonitor
                 if (state.IsWorking && state.IsMainTask)
                 {
                     tasks.Add(new WorkingTask(id, state.WorkingDirectory,
-                        includeProjectColors ? _projectColors.Resolve(id, state.WorkingDirectory) : null));
+                        includeProjectColors ? _projectColors.Resolve(id, state.WorkingDirectory) : null,
+                        includeProjectColors ? _projectColors.ResolveMarker(id, state.WorkingDirectory) : null));
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

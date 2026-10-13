@@ -40,6 +40,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _animateAgentsItem;
     private readonly ToolStripMenuItem _synchronizeAgentsItem;
     private readonly ToolStripMenuItem _projectColorsItem;
+    private readonly ToolStripMenuItem _projectIconsItem;
     private readonly Dictionary<LoadingIconStyle, ToolStripMenuItem> _agentStyleItems = [];
     private readonly Dictionary<AgentIndicatorPosition, ToolStripMenuItem> _agentPositionItems = [];
     private readonly Dictionary<AgentIndicatorSize, ToolStripMenuItem> _agentSizeItems = [];
@@ -291,6 +292,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _ = RefreshActivityAsync();
         };
         agentMenu.DropDownItems.Add(_projectColorsItem);
+        _projectIconsItem = new ToolStripMenuItem("Show project icon")
+        {
+            Checked = WidgetSettings.ShowProjectIcons,
+            CheckOnClick = true,
+            Enabled = WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons,
+            ToolTipText = "Show a small project-colored marker at the upper-right of each task icon."
+        };
+        _projectIconsItem.Click += (_, _) =>
+        {
+            WidgetSettings.ShowProjectIcons = _projectIconsItem.Checked;
+            ApplyAgentSettings();
+            _ = RefreshActivityAsync();
+        };
+        agentMenu.DropDownItems.Add(_projectIconsItem);
         var loadingStyleMenu = new ToolStripMenuItem("Loading icon style");
         foreach (var style in Enum.GetValues<LoadingIconStyle>())
         {
@@ -446,7 +461,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _readingActivity = true;
         try
         {
-            var includeColors = _projectColorsItem.Checked &&
+            var includeColors = (_projectColorsItem.Checked || _projectIconsItem.Checked) &&
                 WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
             var tasks = await Task.Run(() => _activityMonitor.ReadTasks(_shutdown.Token, includeColors), _shutdown.Token);
             if (_shutdown.IsCancellationRequested)
@@ -485,12 +500,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void ApplyAgentSettings()
     {
         _projectColorsItem.Enabled = WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
+        _projectIconsItem.Enabled = WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
         foreach (var widget in _widgets)
         {
             widget.ApplyAgentSettings(WidgetSettings.ShowAgentCounter, WidgetSettings.AnimateAgentCounter,
                 WidgetSettings.SelectedLoadingIconStyle, WidgetSettings.SelectedAgentIndicatorPosition,
                 WidgetSettings.SelectedAgentIndicatorSize, WidgetSettings.SelectedAgentIndicatorMode,
-                WidgetSettings.SynchronizeAgentAnimations, WidgetSettings.UseProjectColors);
+                WidgetSettings.SynchronizeAgentAnimations, WidgetSettings.UseProjectColors, WidgetSettings.ShowProjectIcons);
         }
     }
 

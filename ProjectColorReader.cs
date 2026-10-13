@@ -40,11 +40,13 @@ internal sealed class ProjectColorReader(string home)
     }
 
     internal Color? Resolve(string threadId, string? workingDirectory) => _map.Resolve(threadId, workingDirectory);
+    internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory) => _map.ResolveMarker(threadId, workingDirectory);
 }
 
 internal sealed class ProjectColorMap
 {
     private readonly Dictionary<string, Color> _colors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProjectMarker> _markers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _assignments = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _legacyIds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _rootHints = new(StringComparer.Ordinal);
@@ -64,6 +66,10 @@ internal sealed class ProjectColorMap
             if (StringProperty(project.Value, "color") is { } token && ParseColor(token) is { } color)
             {
                 map._colors[project.Name] = color;
+            }
+            if (project.Value.ValueKind == JsonValueKind.Object && project.Value.TryGetProperty("marker", out var marker))
+            {
+                map._markers[project.Name] = ParseMarker(marker);
             }
         }
         foreach (var assignment in Properties(state, "thread-project-assignments"))
@@ -123,7 +129,23 @@ internal sealed class ProjectColorMap
         return map;
     }
 
-    internal Color? Resolve(string threadId, string? workingDirectory)
+    internal Color? Resolve(string threadId, string? workingDirectory) =>
+        ProjectForTask(threadId, workingDirectory) is { } id ? ColorForProject(id) : null;
+
+    internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory)
+    {
+        if (ProjectForTask(threadId, workingDirectory) is not { } id)
+        {
+            return null;
+        }
+        if (_markers.TryGetValue(id, out var marker))
+        {
+            return marker;
+        }
+        return _legacyIds.TryGetValue(id, out var legacy) && _markers.TryGetValue(legacy, out marker) ? marker : ProjectMarker.Folder;
+    }
+
+    private string? ProjectForTask(string threadId, string? workingDirectory)
     {
         if (_projectless.Contains(threadId))
         {
@@ -133,13 +155,27 @@ internal sealed class ProjectColorMap
         // or another directory, or the assigned project has no custom color.
         if (_assignments.TryGetValue(threadId, out var projectId))
         {
-            return ColorForProject(projectId);
+            return projectId;
         }
         if (_rootHints.TryGetValue(threadId, out var hint) && ProjectForDirectory(hint) is { } hintedProject)
         {
-            return ColorForProject(hintedProject);
+            return hintedProject;
         }
-        return ProjectForDirectory(workingDirectory) is { } project ? ColorForProject(project) : null;
+        return ProjectForDirectory(workingDirectory);
+    }
+
+    internal static ProjectMarker ParseMarker(JsonElement marker)
+    {
+        if (StringProperty(marker, "kind") == "icon" && StringProperty(marker, "icon") is { Length: > 0 and <= 64 } icon)
+        {
+            return new ProjectMarker(icon);
+        }
+        if (StringProperty(marker, "kind") == "emoji" && StringProperty(marker, "emoji") is { Length: > 0 and <= 64 } emoji &&
+            !emoji.Any(char.IsControl) && !string.IsNullOrWhiteSpace(emoji))
+        {
+            return new ProjectMarker(StringInfo.GetNextTextElement(emoji.Trim()), IsEmoji: true);
+        }
+        return ProjectMarker.Folder;
     }
 
     private Color? ColorForProject(string id)

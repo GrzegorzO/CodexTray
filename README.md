@@ -33,6 +33,7 @@ use unreleased features; check the changelog when using a release archive.
 - Small (70%), Normal (100%), and Large (130%) agent indicators
 - Icon and number, or one spaced icon per running main task, expanding outward
 - Optional project colors for repeated task icons, matching Codex Desktop's palette
+- Switchable project icon badges at the upper-right of repeated loading icons
 - One widget on every connected display
 - Settings and per-monitor positions remembered in the current user profile
 - Optional start with Windows
@@ -105,6 +106,7 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
 | **Display → Working agents → Use project colors** | Off by default; available in One icon per task mode to color each icon by its task's project |
+| **Display → Working agents → Show project icon** | Off by default; add a small project-colored badge at the upper-right of each task icon, independently of loading-icon coloring |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
@@ -147,9 +149,16 @@ with their task when icons expand on either side and refresh after a project is
 recolored. Tasks without a resolvable custom project color keep the usual blue.
 Icon-and-number mode keeps its usual color.
 
+Enable **Show project icon** to add the project's selected marker at the upper-right
+of each repeated loading icon. This separate switch works with **Use project
+colors** on or off: the badge always uses the project color (usual blue when no
+custom color is available). Badges stay still while the loading icons animate.
+
 ![Agent indicator sizes and display modes](docs/images/agent-layout-gallery.png)
 
 ![Example project colors with repeated task icons](docs/images/project-colors-gallery.png)
+
+![Project badges with blue and project-colored loading icons](docs/images/project-icons-gallery.png)
 
 These galleries are static previews. See the [working-agent guide](docs/working-agents.md)
 for every default, all eleven icon styles, compatibility details, and troubleshooting.
@@ -176,7 +185,7 @@ are missing or incompatible, an absent indicator does not prove all agents are i
 The monitor reads locally on a background thread and sends no model requests.
 Animation runs only while a visible widget has a nonzero count.
 Project coloring additionally reads Codex Desktop's local
-`.codex-global-state.json` when enabled in repeated-icon mode. It uses task-project
+`.codex-global-state.json` when coloring or project badges are enabled in repeated-icon mode. It uses task-project
 assignments, workspace hints, and project roots to resolve colors. This desktop
 state format can change too; unavailable mappings fall back to the normal blue
 without affecting the main-task count.
@@ -214,7 +223,7 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - Agent activity reads local Codex session logs, which can contain conversation
   content, to inspect session metadata and turn lifecycle events. CodexTray does
   not upload, save, or log that content, and does not change session-file contents.
-- Project coloring reads local desktop project metadata only while enabled in
+- Project coloring and badges read local desktop project metadata only while enabled in
   repeated-icon mode. It does not modify Codex's state or project settings.
 - No model prompts or generation requests
 - Network/authentication behavior is delegated to the installed Codex app server

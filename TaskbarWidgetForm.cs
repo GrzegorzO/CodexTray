@@ -70,6 +70,7 @@ internal sealed class TaskbarWidgetForm : Form
     private (string FiveHour, string Weekly)? _lastCountdownLabels;
     private int _workingAgentCount;
     private Color?[] _taskColors = [];
+    private ProjectMarker?[] _taskMarkers = [];
 
     internal bool ShowAgentCounter { get; private set; } = true;
     internal bool AnimateAgentCounter { get; private set; } = true;
@@ -79,6 +80,7 @@ internal sealed class TaskbarWidgetForm : Form
     internal AgentIndicatorMode AgentCounterMode { get; private set; }
     internal bool SynchronizeAgentAnimations { get; private set; }
     internal bool UseProjectColors { get; private set; }
+    internal bool ShowProjectIcons { get; private set; }
     internal int AgentCounterWidth => ShowAgentCounter
         ? AgentIndicatorRenderer.WidthFor(_workingAgentCount, AgentCounterSize, AgentCounterMode) : 0;
     internal Rectangle AgentCounterBounds => new(
@@ -115,6 +117,7 @@ internal sealed class TaskbarWidgetForm : Form
             AgentCounterMode = WidgetSettings.SelectedAgentIndicatorMode;
             SynchronizeAgentAnimations = WidgetSettings.SynchronizeAgentAnimations;
             UseProjectColors = WidgetSettings.UseProjectColors;
+            ShowProjectIcons = WidgetSettings.ShowProjectIcons;
         }
         _tooltip.InitialDelay = 250;
         _tooltip.ReshowDelay = 100;
@@ -168,25 +171,28 @@ internal sealed class TaskbarWidgetForm : Form
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         _workingAgentCount = count;
         _taskColors = [];
+        _taskMarkers = [];
         UpdateAgentPresentation(previousLeftInset);
     }
 
     internal void SetWorkingTasks(IReadOnlyList<WorkingTask> tasks)
     {
         var colors = tasks.Select(task => task.ProjectColor).ToArray();
-        if (_workingAgentCount == tasks.Count && _taskColors.SequenceEqual(colors))
+        var markers = tasks.Select(task => task.ProjectMarker).ToArray();
+        if (_workingAgentCount == tasks.Count && _taskColors.SequenceEqual(colors) && _taskMarkers.SequenceEqual(markers))
         {
             return;
         }
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         _workingAgentCount = tasks.Count;
         _taskColors = colors;
+        _taskMarkers = markers;
         UpdateAgentPresentation(previousLeftInset);
     }
 
     internal void ApplyAgentSettings(bool show, bool animate, LoadingIconStyle style, AgentIndicatorPosition side,
         AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
-        bool synchronizeAnimations = false, bool useProjectColors = false)
+        bool synchronizeAnimations = false, bool useProjectColors = false, bool showProjectIcons = false)
     {
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         ShowAgentCounter = show;
@@ -197,6 +203,7 @@ internal sealed class TaskbarWidgetForm : Form
         AgentCounterMode = mode;
         SynchronizeAgentAnimations = synchronizeAnimations;
         UseProjectColors = useProjectColors;
+        ShowProjectIcons = showProjectIcons;
         UpdateAgentPresentation(previousLeftInset);
     }
 
@@ -567,7 +574,9 @@ internal sealed class TaskbarWidgetForm : Form
             var phase = AnimateAgentCounter ? (Environment.TickCount64 % duration) / (float)duration : 0.25f;
             AgentIndicatorRenderer.Draw(graphics, AgentCounterBounds, _workingAgentCount, AgentIconStyle, phase,
                 AgentCounterSize, AgentCounterMode, AgentCounterSide, SynchronizeAgentAnimations,
-                UseProjectColors && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskColors : null);
+                (UseProjectColors || ShowProjectIcons) && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskColors : null,
+                ShowProjectIcons && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskMarkers : null,
+                colorLoadingIcons: UseProjectColors);
         }
     }
 
@@ -1474,6 +1483,12 @@ internal static class WidgetSettings
     {
         get => ReadBoolean("UseProjectColors", defaultValue: false);
         set => WriteBoolean("UseProjectColors", value);
+    }
+
+    public static bool ShowProjectIcons
+    {
+        get => ReadBoolean("ShowProjectIcons", defaultValue: false);
+        set => WriteBoolean("ShowProjectIcons", value);
     }
 
     internal static T ParseEnum<T>(object? value, T fallback) where T : struct, Enum =>
