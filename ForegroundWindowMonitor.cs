@@ -13,6 +13,8 @@ internal sealed class ForegroundWindowMonitor : IDisposable
     private readonly Action _foregroundChanged;
     private IntPtr _foregroundHook;
     private IntPtr _locationHook;
+    private IntPtr _lastForegroundWindow;
+    private Rectangle? _lastForegroundBounds;
 
     public ForegroundWindowMonitor(Action foregroundChanged)
     {
@@ -71,6 +73,17 @@ internal sealed class ForegroundWindowMonitor : IDisposable
             return;
         }
 
+        if (GetWindowRect(window, out var native))
+        {
+            var bounds = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
+            if (eventType == EventObjectLocationChange && window == _lastForegroundWindow && bounds == _lastForegroundBounds)
+            {
+                return;
+            }
+            _lastForegroundWindow = window;
+            _lastForegroundBounds = bounds;
+        }
+
         try
         {
             _foregroundChanged();
@@ -107,5 +120,18 @@ internal sealed class ForegroundWindowMonitor : IDisposable
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr handle, out NativeRectangle rectangle);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRectangle
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
 
 }

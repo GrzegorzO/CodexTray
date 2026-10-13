@@ -24,8 +24,8 @@ an implementation dependency and does not cover remote-only or ephemeral work.
 `AgentIndicatorRenderer` draws eleven native loading styles, including a robot
 head with blinking eyes, a glowing antenna, and a gentle bob over a slower
 3.6-second cycle. Widgets reserve a separate strip at the selected outer edge
-and collapse it completely at zero. The animation timer invalidates only the
-indicator strip while visible and active; the reduced-motion setting draws a
+and collapse it completely at zero. The animation timer invalidates the complete
+buffered window while visible and active; the reduced-motion setting draws a
 static frame. Counter visibility, style, motion,
 and side use the same per-user registry settings as the existing display options.
 Indicator size scales the native drawing by 0.7, 1.0, or 1.3, including the count
@@ -71,10 +71,14 @@ z-order band. Monitor-specific offsets are stored in the current user's registry
 
 This design intentionally avoids DLL injection and Explorer patching. Out-of-context
 foreground and window-location accessibility event hooks restore z-order after
-transient overlays. A lightweight visibility check hit-tests each taskbar's actual
-z-order presence, keeping its widget hidden whenever that taskbar is auto-hidden or
-covered by any fullscreen application. Windows shell surfaces such as Start and
-Search are recognized separately because they leave the taskbar visible.
+transient overlays. Passive visibility polling never raises already-visible
+widgets. It checks each taskbar's visible geometry and fullscreen windows above
+that taskbar on its own monitor, ignoring the widget process and DWM-cloaked or
+minimized windows. It does not hit-test animated transparent pixels or use a
+different monitor's foreground application to decide visibility. Windows shell
+surfaces such as Start and Search are recognized separately because they leave
+the taskbar visible. Animated frames repaint the entire double-buffered window
+to keep the batteries and icons together under fullscreen-video composition.
 
 ## Automatic startup
 

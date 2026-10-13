@@ -22,6 +22,10 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Repaint animation as a complete buffered frame and keep visibility polling
+  passive to avoid flickering when video is fullscreen on another monitor
+- Detect fullscreen coverage per monitor without hit-testing the widget's own
+  animated transparent surface; ignore minimized and cloaked windows
 - Keep the tray icon available when no startup task exists and the COM binder
   reports the missing task as a FileNotFoundException
 - Replace one-shot Startup-folder registration with a per-user logon task and

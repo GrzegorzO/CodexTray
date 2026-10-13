@@ -46,6 +46,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly List<Bitmap> _agentMenuImages = [];
     private int _workingAgentCount;
     private bool _readingActivity;
+    private int _visibilityUpdatePending;
     private string? _activityError;
     private readonly ContextMenuStrip _menu;
     private readonly SynchronizationContext _uiContext;
@@ -59,8 +60,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     public TrayApplicationContext()
     {
         _uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
-        _foregroundWindowMonitor = new ForegroundWindowMonitor(
-            () => _uiContext.Post(_ => UpdateWidgetVisibility(), null));
+        _foregroundWindowMonitor = new ForegroundWindowMonitor(QueueWidgetVisibilityUpdate);
         _startupItem = new ToolStripMenuItem("Start with Windows")
         {
             Checked = StartupManager.IsEnabled,
@@ -407,7 +407,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // foreground or top-level location event. Polling this inexpensive Win32
         // state keeps each widget's visibility connected to its taskbar.
         _visibilityTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility();
+        _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility(restoreZOrder: false);
         _visibilityTimer.Start();
 
         _activityTimer = new System.Windows.Forms.Timer { Interval = 1000 };
@@ -644,6 +644,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateWidgetVisibility();
     }
 
+    private void QueueWidgetVisibilityUpdate()
+    {
+        if (Interlocked.Exchange(ref _visibilityUpdatePending, 1) != 0)
+        {
+            return;
+        }
+        _uiContext.Post(_ =>
+        {
+            Interlocked.Exchange(ref _visibilityUpdatePending, 0);
+            if (!_shutdown.IsCancellationRequested)
+            {
+                UpdateWidgetVisibility();
+            }
+        }, null);
+    }
+
     private void UpdateWidgetVisibility(bool restoreZOrder = true)
     {
         foreach (var widget in _widgets)
@@ -659,6 +675,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             {
                 widget.PlaceBesideWeather();
                 widget.Show();
+                widget.RestoreTaskbarZOrder();
             }
 
             if (restoreZOrder)

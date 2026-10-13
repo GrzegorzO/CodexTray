@@ -147,8 +147,12 @@ internal sealed class TaskbarWidgetForm : Form
         _countdownTimer.Tick += (_, _) => RefreshCountdownIfChanged();
         _countdownTimer.Start();
         _animationTimer = new System.Windows.Forms.Timer { Interval = 50 };
-        _animationTimer.Tick += (_, _) => Invalidate(AgentCounterBounds);
+        // Color-key layered windows need a complete buffered frame. Partial
+        // presents can expose an empty surface while another monitor plays video.
+        _animationTimer.Tick += (_, _) => InvalidateAnimationFrame();
     }
+
+    internal void InvalidateAnimationFrame() => Invalidate();
 
     internal void SetWorkingAgentCount(int count)
     {
@@ -363,7 +367,7 @@ internal sealed class TaskbarWidgetForm : Form
             0,
             0,
             0,
-            SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoRedraw | SwpShowWindow);
+            SwpNoMove | SwpNoSize | SwpNoActivate | SwpNoRedraw);
     }
 
     public bool IsTaskbarVisible()
@@ -383,31 +387,57 @@ internal sealed class TaskbarWidgetForm : Form
             return false;
         }
 
-        // Fullscreen windows can cover a taskbar that Windows still reports as
-        // visible. Sample several points so our widget cannot skew one hit test.
-        ReadOnlySpan<int> sampleTenths = [1, 3, 5, 7, 9];
-        foreach (var tenth in sampleTenths)
+        // Inspect covering top-level windows above this monitor's taskbar.
+        // Pixel hit tests can hit our own animated, color-keyed window and feed
+        // its current frame back into the visibility decision.
+        var covered = false;
+        EnumWindows((window, parameter) =>
         {
-            var point = isHorizontal
-                ? new NativePoint(
-                    visibleTaskbar.Left + visibleTaskbar.Width * tenth / 10,
-                    visibleTaskbar.Top + visibleTaskbar.Height / 2)
-                : new NativePoint(
-                    visibleTaskbar.Left + visibleTaskbar.Width / 2,
-                    visibleTaskbar.Top + visibleTaskbar.Height * tenth / 10);
-            var windowAtPoint = WindowFromPoint(point);
-            if (windowAtPoint == taskbarHandle ||
-                GetAncestor(windowAtPoint, GaRoot) == taskbarHandle ||
-                IsChild(taskbarHandle, windowAtPoint) ||
-                IsWindowsShellSurface(windowAtPoint))
+            if (window == taskbarHandle)
+            {
+                return false;
+            }
+            if (!IsWindowVisible(window) || IsIconic(window))
             {
                 return true;
             }
-        }
+            _ = GetWindowThreadProcessId(window, out var processId);
+            if (processId == Environment.ProcessId || !TryGetVisibleWindowBounds(window, out var bounds) ||
+                !TaskbarVisibility.CoversMonitor(bounds, _targetScreen.Bounds))
+            {
+                return true;
+            }
+            _ = DwmGetWindowAttribute(window, 14, out int cloaked, sizeof(int));
+            if (cloaked != 0)
+            {
+                return true;
+            }
+            if (IsWindowsShellSurface(window))
+            {
+                // Start/Search may own a transparent fullscreen input surface
+                // while intentionally revealing the taskbar beneath it.
+                return false;
+            }
+            covered = TaskbarVisibility.BlocksTaskbar(bounds, _targetScreen.Bounds,
+                visible: true, minimized: false, cloaked: false, ownWindow: false, shellSurface: false);
+            return !covered;
+        }, IntPtr.Zero);
 
-        // Start, Search, and other Windows shell flyouts can own a transparent
-        // fullscreen surface while leaving the taskbar visible underneath.
-        return IsWindowsShellSurface(GetForegroundWindow());
+        return !covered;
+    }
+
+    private static bool TryGetVisibleWindowBounds(IntPtr window, out Rectangle bounds)
+    {
+        // DWM excludes invisible resize borders, so a maximized browser is not
+        // mistaken for fullscreen. GetWindowRect covers non-DWM windows.
+        if (DwmGetWindowAttribute(window, 9, out NativeRectangle native, Marshal.SizeOf<NativeRectangle>()) != 0 &&
+            !GetWindowRect(window, out native))
+        {
+            bounds = Rectangle.Empty;
+            return false;
+        }
+        bounds = Rectangle.FromLTRB(native.Left, native.Top, native.Right, native.Bottom);
+        return true;
     }
 
     private static bool IsWindowsShellSurface(IntPtr window)
@@ -1241,20 +1271,17 @@ internal sealed class TaskbarWidgetForm : Form
     private static extern bool IsWindowVisible(IntPtr handle);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr WindowFromPoint(NativePoint point);
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr handle);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetAncestor(IntPtr handle, uint flags);
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr handle, uint attribute, out NativeRectangle value, int size);
 
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr handle, uint attribute, out int value, int size);
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsChild(IntPtr parentHandle, IntPtr handle);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong32(IntPtr handle, int index);
@@ -1284,7 +1311,6 @@ internal sealed class TaskbarWidgetForm : Form
     private const uint SwpNoRedraw = 0x0008;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpShowWindow = 0x0040;
-    private const uint GaRoot = 2;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRectangle
@@ -1294,12 +1320,7 @@ internal sealed class TaskbarWidgetForm : Form
         public int Right;
         public int Bottom;
     }
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct NativePoint(int x, int y)
-    {
-        public readonly int X = x;
-        public readonly int Y = y;
-    }
+
 }
 
 internal static class WidgetSettings

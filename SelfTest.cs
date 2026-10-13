@@ -13,6 +13,7 @@ internal static class SelfTest
             VerifyStartupTask();
             VerifyStartupTaskLookup();
             VerifyStartupRecovery();
+            VerifyTaskbarVisibility();
             VerifyAgentActivity();
             VerifyAgentIndicator();
             using var document = JsonDocument.Parse("""
@@ -88,6 +89,37 @@ internal static class SelfTest
         {
             throw new InvalidOperationException($"Self-test failed: {name}");
         }
+    }
+
+    private static void VerifyTaskbarVisibility()
+    {
+        var primary = new Rectangle(0, 0, 1920, 1080);
+        var videoMonitor = new Rectangle(-2560, -574, 2560, 1440);
+        Assert(!Blocks(videoMonitor, primary), "fullscreen video on another monitor does not hide this widget");
+        Assert(Blocks(videoMonitor, videoMonitor), "fullscreen video covers its own monitor");
+        Assert(!Blocks(new Rectangle(0, 0, 1920, 1032), primary), "maximized work-area browser leaves taskbar visible");
+        Assert(!Blocks(Rectangle.Empty, primary), "missing window bounds do not hide widget");
+        Assert(TaskbarVisibility.CoversMonitor(new Rectangle(1, 1, 1918, 1078), primary), "fullscreen frame rounding tolerance");
+        Assert(!TaskbarVisibility.BlocksTaskbar(primary, primary, true, false, false, true, false), "own animated surface cannot change taskbar visibility");
+        Assert(!TaskbarVisibility.BlocksTaskbar(primary, primary, true, false, false, false, true), "Start and Search surfaces preserve taskbar visibility");
+        Assert(!TaskbarVisibility.BlocksTaskbar(primary, primary, false, false, false, false, false), "hidden fullscreen window does not block taskbar");
+        Assert(!TaskbarVisibility.BlocksTaskbar(primary, primary, true, true, false, false, false), "minimized fullscreen window does not block taskbar");
+        Assert(!TaskbarVisibility.BlocksTaskbar(primary, primary, true, false, true, false, false), "cloaked window on another virtual desktop does not block taskbar");
+        var spanning = Rectangle.Union(primary, videoMonitor);
+        Assert(Blocks(spanning, primary) && Blocks(spanning, videoMonitor), "window spanning both monitors covers both taskbars");
+
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        widget.ApplyAgentSettings(true, true, LoadingIconStyle.Robot, AgentIndicatorPosition.Right);
+        widget.SetWorkingAgentCount(2);
+        _ = widget.Handle;
+        Rectangle? invalidated = null;
+        widget.Invalidated += (_, eventArgs) => invalidated = eventArgs.InvalidRect;
+        widget.InvalidateAnimationFrame();
+        Assert(invalidated == widget.ClientRectangle, "animation invalidates a complete buffered frame including batteries");
+
+        static bool Blocks(Rectangle window, Rectangle monitor) =>
+            TaskbarVisibility.BlocksTaskbar(window, monitor, true, false, false, false, false);
     }
 
     private static void VerifyAgentActivity()
