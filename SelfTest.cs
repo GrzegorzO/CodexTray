@@ -16,6 +16,7 @@ internal static class SelfTest
             VerifyTaskbarVisibility();
             VerifyAgentActivity();
             VerifyMainTaskCounting();
+            VerifyProjectColors();
             VerifyAgentIndicator();
             using var document = JsonDocument.Parse("""
                 {
@@ -138,6 +139,10 @@ internal static class SelfTest
         Assert(!state.IsMainTask, "legacy string subagent source is excluded");
         state.Apply("""{"type":"session_meta","payload":{"source":"cli","forked_from_id":"original"}}""");
         Assert(state.IsMainTask, "user-created fork is still a main task");
+        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","cwd":"C:\\Projects\\Main"}}""");
+        Assert(state.WorkingDirectory == @"C:\Projects\Main", "session working directory is read for project matching");
+        state.Apply("""{"type":"turn_context","payload":{"cwd":"C:\\Worktrees\\Main"}}""");
+        Assert(state.WorkingDirectory == @"C:\Worktrees\Main" && state.IsMainTask, "turn working directory updates without changing task classification");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}""");
         Assert(state.IsWorking, "started turn is working");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous"}}""");
@@ -209,6 +214,7 @@ internal static class SelfTest
         var locks = Directory.CreateDirectory(Path.Combine(home, "thread-writer-locks"));
         var sessions = Directory.CreateDirectory(Path.Combine(home, "sessions"));
         var fixtures = new List<(string Lock, string Rollout, FileStream Writer)>();
+        var appearancePath = Path.Combine(home, ".codex-global-state.json");
         try
         {
             var main = AddTask("vscode");
@@ -219,8 +225,23 @@ internal static class SelfTest
             var fork = AddTask("vscode", forkedFrom: main.Id, acquireLock: false);
             var monitor = new AgentActivityMonitor(home);
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "one main task with guardian and workers counts once");
+            WriteAppearance("green");
+            var colored = monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single();
+            Assert(colored.ThreadId == main.Id && colored.ProjectColor == ProjectColorMap.ParseColor("green"), "color belongs to the main task, not its helpers");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectColor is null, "project metadata is optional when colors are off");
+            WriteAppearance("red");
+            Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ProjectColor == ProjectColorMap.ParseColor("red"),
+                "project recoloring updates without restarting a main task");
+            File.WriteAllText(appearancePath, "{");
+            Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ProjectColor == ProjectColorMap.ParseColor("red"),
+                "temporary partial state writes preserve the last valid project color");
+            File.Delete(appearancePath);
+            Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ProjectColor is null,
+                "missing project state falls back without losing the main task");
             second.Writer.Lock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 2, "two independent main tasks count twice");
+            var ordered = monitor.ReadTasks(CancellationToken.None).Select(task => task.ThreadId).ToArray();
+            Assert(ordered.SequenceEqual(new[] { main.Id, second.Id }.Order(StringComparer.Ordinal)), "task icon order stays stable across polls");
             fork.Writer.Lock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 3, "manually forked main task counts separately");
             File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"active"}}""" + "\n");
@@ -239,6 +260,7 @@ internal static class SelfTest
             }
             Directory.Delete(locks.FullName);
             Directory.Delete(sessions.FullName);
+            File.Delete(appearancePath);
             Directory.Delete(home);
         }
 
@@ -262,6 +284,139 @@ internal static class SelfTest
                 writer.Lock(0, 1);
             }
             return (id, rollout, writer);
+        }
+
+        void WriteAppearance(string color)
+        {
+            var assignments = new Dictionary<string, object>
+            {
+                [Path.GetFileNameWithoutExtension(fixtures[0].Lock)] = new { projectId = "main-project", projectKind = "local" }
+            };
+            File.WriteAllText(appearancePath, JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["project-appearances"] = new Dictionary<string, object> { ["main-project"] = new { color } },
+                ["thread-project-assignments"] = assignments
+            }));
+        }
+    }
+
+    private static void VerifyProjectColors()
+    {
+        using var document = JsonDocument.Parse("""
+            {
+              "project-appearances": {
+                "main-project": { "color": "green" },
+                "nested-project": { "color": "yellow" },
+                "other-project": { "color": "red" },
+                "default-project": { "color": "black" }
+              },
+              "thread-project-assignments": {
+                "assigned": { "projectId": "main-project" },
+                "canonical": { "projectId": "canonical-project" },
+                "default": { "projectId": "default-project" },
+                "projectless": { "projectId": "main-project" }
+              },
+              "app-server-project-id-by-legacy-project-id-by-host": {
+                "local:fixture": { "main-project": "canonical-project" }
+              },
+              "local-projects": {
+                "main-project": { "rootPaths": ["C:\\Projects\\Main"] },
+                "nested-project": { "rootPaths": ["C:\\Projects\\Main\\Nested"] },
+                "other-project": { "rootPaths": ["C:\\Projects\\Other"] }
+              },
+              "thread-workspace-root-hints": { "worktree": "C:\\Projects\\Main" },
+              "projectless-thread-ids": ["projectless"]
+            }
+            """);
+        var map = ProjectColorMap.Parse(document.RootElement);
+        var green = ProjectColorMap.ParseColor("green");
+        Assert(map.Resolve("assigned", @"C:\Projects\Other") == green, "explicit project assignment wins over working directory");
+        Assert(map.Resolve("canonical", null) == green, "migrated project IDs resolve legacy appearance colors");
+        Assert(map.Resolve("unassigned", @"c:\PROJECTS\main\src") == green, "project roots match Windows paths case-insensitively");
+        Assert(map.Resolve("unassigned", @"C:\Projects\Main\Nested\src") == ProjectColorMap.ParseColor("yellow"), "longest matching project root wins");
+        Assert(map.Resolve("unassigned", @"C:\Projects\Main-other") is null, "sibling directory cannot inherit another project's color");
+        Assert(map.Resolve("worktree", @"C:\Worktrees\Detached") == green, "workspace root hints support worktree tasks");
+        Assert(map.Resolve("projectless", @"C:\Projects\Main") is null, "explicitly projectless tasks keep the normal color");
+        Assert(map.Resolve("default", @"C:\Projects\Main") is null, "default project appearance does not borrow another project's color");
+        Assert(map.Resolve("missing", null) is null, "unmatched task uses fallback color");
+        Assert(ProjectColorMap.ParseColor(" GREEN ") == Color.FromArgb(64, 201, 119), "named color matches desktop dark-sidebar palette");
+        Assert(ProjectColorMap.ParseColor("#ff6764") == ProjectColorMap.ParseColor("red"), "hex project colors are supported");
+        Assert(ProjectColorMap.ParseColor("unknown") is null && ProjectColorMap.ParseColor("#invalid") is null,
+            "unsupported project colors use the normal icon");
+        using var malformed = JsonDocument.Parse("""{"project-appearances":{"bad":null},"local-projects":{"bad":{"rootPaths":[42,null]}},"thread-project-assignments":{"bad":42}}""");
+        Assert(ProjectColorMap.Parse(malformed.RootElement).Resolve("bad", null) is null, "unrecognized project metadata is ignored safely");
+        using var ambiguous = JsonDocument.Parse("""{"local-projects":{"one":{"rootPaths":["C:\\Same"]},"two":{"rootPaths":["C:\\Same"]}},"project-appearances":{"one":{"color":"red"},"two":{"color":"green"}}}""");
+        Assert(ProjectColorMap.Parse(ambiguous.RootElement).Resolve("unassigned", @"C:\Same\src") is null,
+            "ambiguous project roots cannot assign an arbitrary project color");
+
+        VerifyProjectColorRendering();
+    }
+
+    private static void VerifyProjectColorRendering()
+    {
+        Color?[] colors = [ProjectColorMap.ParseColor("green"), ProjectColorMap.ParseColor("yellow"), null];
+        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
+            foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+                foreach (var style in Enum.GetValues<LoadingIconStyle>())
+                {
+                    var width = AgentIndicatorRenderer.WidthFor(3, size, AgentIndicatorMode.RepeatedIcons);
+                    using var actual = new Bitmap(width, 42);
+                    using var expected = new Bitmap(width, 42);
+                    using (var graphics = Graphics.FromImage(actual))
+                    {
+                        AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, width, 42), 3, style, 0.25f,
+                            size, AgentIndicatorMode.RepeatedIcons, side, synchronizeAnimations: true, projectColors: colors);
+                    }
+                    using (var graphics = Graphics.FromImage(expected))
+                    {
+                        graphics.TranslateTransform(0, 21);
+                        graphics.ScaleTransform(AgentIndicatorRenderer.ScaleFor(size), AgentIndicatorRenderer.ScaleFor(size));
+                        for (var index = 0; index < 3; index++)
+                        {
+                            var x = (int)AgentIndicatorRenderer.IconXFor(index, 3, side) - 8;
+                            AgentIndicatorRenderer.Draw(graphics, new Rectangle(x, -21, 32, 42), 1, style, 0.25f,
+                                mode: AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true, projectColors: [colors[index]]);
+                        }
+                    }
+                    AssertSamePixels(expected, actual, "per-task colors follow their icons on either side at every size and style");
+                }
+
+        using var neutral = new Bitmap(60, 42);
+        using var withColors = new Bitmap(60, 42);
+        using (var graphics = Graphics.FromImage(neutral))
+        {
+            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 60, 42), 3, LoadingIconStyle.Robot, 0.25f);
+        }
+        using (var graphics = Graphics.FromImage(withColors))
+        {
+            AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 60, 42), 3, LoadingIconStyle.Robot, 0.25f, projectColors: colors);
+        }
+        AssertSamePixels(neutral, withColors, "icon and number mode always keeps its normal color");
+
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        Assert(!widget.UseProjectColors, "project colors are opt-in");
+        widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right,
+            mode: AgentIndicatorMode.RepeatedIcons, useProjectColors: true);
+        widget.SetWorkingTasks([new WorkingTask("main", null, colors[0])]);
+        using var before = widget.RenderPreview(Color.Black);
+        widget.SetWorkingTasks([new WorkingTask("main", null, colors[1])]);
+        using var after = widget.RenderPreview(Color.Black);
+        var changed = false;
+        for (var x = 0; x < before.Width; x++)
+            for (var y = 0; y < before.Height; y++)
+            {
+                changed |= before.GetPixel(x, y) != after.GetPixel(x, y);
+            }
+        Assert(changed, "same-count project recoloring repaints the widget");
+
+        static void AssertSamePixels(Bitmap expected, Bitmap actual, string message)
+        {
+            for (var x = 0; x < expected.Width; x++)
+                for (var y = 0; y < expected.Height; y++)
+                {
+                    Assert(expected.GetPixel(x, y) == actual.GetPixel(x, y), message);
+                }
         }
     }
 

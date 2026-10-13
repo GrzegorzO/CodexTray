@@ -7,6 +7,8 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Optional project colors in One icon per task mode, with saved preferences,
+  stable task/color ordering, automatic recoloring, and normal-blue fallback
 - Purple battery color for the final 5% of remaining usage
 - Working local-agent counter with eleven loading styles: rotating arc, orbiting
   dots, pulsing dot, animated bars, spinning spokes, bouncing dots, ripple rings,

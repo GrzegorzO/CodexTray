@@ -7,6 +7,7 @@ namespace CodexTray;
 internal sealed class AgentActivityMonitor
 {
     private readonly string _home;
+    private readonly ProjectColorReader _projectColors;
     private readonly Dictionary<string, string> _rollouts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ActivityState> _states = new(StringComparer.OrdinalIgnoreCase);
     private long _nextDiscovery;
@@ -15,15 +16,18 @@ internal sealed class AgentActivityMonitor
     {
         _home = home ?? Environment.GetEnvironmentVariable("CODEX_HOME") ??
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
+        _projectColors = new ProjectColorReader(_home);
     }
 
-    public int ReadCount(CancellationToken cancellationToken)
+    public int ReadCount(CancellationToken cancellationToken) => ReadTasks(cancellationToken).Count;
+
+    internal IReadOnlyList<WorkingTask> ReadTasks(CancellationToken cancellationToken, bool includeProjectColors = false)
     {
         var lockDirectory = Path.Combine(_home, "thread-writer-locks");
         if (!Directory.Exists(lockDirectory))
         {
             _states.Clear();
-            return 0;
+            return Array.Empty<WorkingTask>();
         }
 
         var liveThreads = Directory.EnumerateFiles(lockDirectory, "*.lock")
@@ -52,8 +56,12 @@ internal sealed class AgentActivityMonitor
             _states.Remove(id);
         }
 
-        var count = 0;
-        foreach (var id in liveThreads)
+        if (includeProjectColors)
+        {
+            _projectColors.Refresh();
+        }
+        var tasks = new List<WorkingTask>();
+        foreach (var id in liveThreads.Order(StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_rollouts.TryGetValue(id, out var path))
@@ -73,7 +81,8 @@ internal sealed class AgentActivityMonitor
                 state.Read(stream, cancellationToken);
                 if (state.IsWorking && state.IsMainTask)
                 {
-                    count++;
+                    tasks.Add(new WorkingTask(id, state.WorkingDirectory,
+                        includeProjectColors ? _projectColors.Resolve(id, state.WorkingDirectory) : null));
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -84,7 +93,7 @@ internal sealed class AgentActivityMonitor
             }
         }
 
-        return count;
+        return tasks;
     }
 
     internal static bool IsWriterAlive(string path)
@@ -113,6 +122,7 @@ internal sealed class AgentActivityMonitor
         private string? _turnId;
         public bool IsWorking { get; private set; }
         public bool IsMainTask { get; private set; }
+        public string? WorkingDirectory { get; private set; }
 
         public void Read(Stream stream, CancellationToken cancellationToken)
         {
@@ -122,6 +132,7 @@ internal sealed class AgentActivityMonitor
                 _turnId = null;
                 IsWorking = false;
                 IsMainTask = false;
+                WorkingDirectory = null;
             }
 
             stream.Position = _offset;
@@ -154,6 +165,7 @@ internal sealed class AgentActivityMonitor
         internal void Apply(string line)
         {
             if (!line.Contains("\"session_meta\"", StringComparison.Ordinal) &&
+                !line.Contains("\"turn_context\"", StringComparison.Ordinal) &&
                 !line.Contains("\"task_started\"", StringComparison.Ordinal) &&
                 !line.Contains("\"task_complete\"", StringComparison.Ordinal) &&
                 !line.Contains("\"turn_aborted\"", StringComparison.Ordinal))
@@ -174,6 +186,7 @@ internal sealed class AgentActivityMonitor
 
                 if (type.GetString() == "session_meta")
                 {
+                    WorkingDirectory = payload.TryGetProperty("cwd", out var cwd) && cwd.ValueKind == JsonValueKind.String ? cwd.GetString() : null;
                     var hasParent = payload.TryGetProperty("parent_thread_id", out var parent) &&
                         parent.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(parent.GetString());
                     var isSubagent = payload.TryGetProperty("source", out var source) &&
@@ -182,6 +195,15 @@ internal sealed class AgentActivityMonitor
                     // User-created forks use forked_from_id and remain main tasks.
                     // Parent links and subagent sources identify workers/guardians.
                     IsMainTask = !hasParent && !isSubagent;
+                    return;
+                }
+
+                if (type.GetString() == "turn_context")
+                {
+                    if (payload.TryGetProperty("cwd", out var cwd) && cwd.ValueKind == JsonValueKind.String)
+                    {
+                        WorkingDirectory = cwd.GetString();
+                    }
                     return;
                 }
 

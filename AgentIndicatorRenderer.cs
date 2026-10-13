@@ -38,6 +38,7 @@ internal enum AgentIndicatorMode
 
 internal static class AgentIndicatorRenderer
 {
+    internal static Color DefaultColor => Color.FromArgb(125, 211, 252);
     internal static string Title(LoadingIconStyle style) => style switch
     {
         LoadingIconStyle.Arc => "Rotating arc",
@@ -77,7 +78,8 @@ internal static class AgentIndicatorRenderer
 
     internal static void Draw(Graphics graphics, Rectangle bounds, int count, LoadingIconStyle style, float phase,
         AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
-        AgentIndicatorPosition side = AgentIndicatorPosition.Right, bool synchronizeAnimations = false)
+        AgentIndicatorPosition side = AgentIndicatorPosition.Right, bool synchronizeAnimations = false,
+        IReadOnlyList<Color?>? projectColors = null)
     {
         if (count <= 0)
         {
@@ -93,7 +95,8 @@ internal static class AgentIndicatorRenderer
             for (var index = 0; index < count; index++)
             {
                 DrawIcon(graphics, new RectangleF(IconXFor(index, count, side), -8, 16, 16),
-                    style, synchronizeAnimations ? phase : (phase + index * 0.08f) % 1);
+                    style, synchronizeAnimations ? phase : (phase + index * 0.08f) % 1,
+                    projectColors is not null && index < projectColors.Count ? projectColors[index] : null);
             }
         }
         else
@@ -108,9 +111,9 @@ internal static class AgentIndicatorRenderer
         graphics.Restore(state);
     }
 
-    private static void DrawIcon(Graphics graphics, RectangleF icon, LoadingIconStyle style, float phase)
+    private static void DrawIcon(Graphics graphics, RectangleF icon, LoadingIconStyle style, float phase, Color? projectColor = null)
     {
-        var color = Color.FromArgb(125, 211, 252);
+        var color = projectColor ?? DefaultColor;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
         switch (style)
         {
@@ -281,7 +284,7 @@ internal static class AgentIndicatorRenderer
         graphics.TranslateTransform(0, (float)Math.Sin(phase * Math.PI * 2) * 0.45f);
 
         using var outline = new Pen(color, 1.1f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var ears = new SolidBrush(Color.FromArgb(80, 155, 192));
+        using var ears = new SolidBrush(color == DefaultColor ? Color.FromArgb(80, 155, 192) : Color.FromArgb(210, color));
         graphics.FillRectangle(ears, 0.1f, 7, 2, 4);
         graphics.FillRectangle(ears, 13.9f, 7, 2, 4);
         graphics.DrawLine(outline, 8, 2, 8, 4);

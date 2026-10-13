@@ -47,6 +47,7 @@ internal static class ScreenshotExporter
                 exportIndividualStyles: false);
             RenderAgentGallery(outputDirectory, snapshot);
             RenderAgentLayoutGallery(outputDirectory, snapshot);
+            RenderProjectColorGallery(outputDirectory, snapshot);
             return 0;
         }
         catch (Exception exception)
@@ -54,6 +55,45 @@ internal static class ScreenshotExporter
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void RenderProjectColorGallery(string outputDirectory, UsageSnapshot snapshot)
+    {
+        using var gallery = new Bitmap(680, 360);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
+        using var captionFont = new Font("Segoe UI", 9);
+        using var text = new SolidBrush(Color.White);
+        graphics.DrawString("Working agents · project colors", titleFont, text, 18, 12);
+        graphics.DrawString("Three main tasks · sample green, yellow, and purple projects", captionFont, text, 18, 40);
+        WorkingTask[] tasks =
+        [
+            new("sample-1", null, ProjectColorMap.ParseColor("green")),
+            new("sample-2", null, ProjectColorMap.ParseColor("yellow")),
+            new("sample-3", null, ProjectColorMap.ParseColor("purple"))
+        ];
+        for (var row = 0; row < 2; row++)
+            for (var column = 0; column < 2; column++)
+            {
+                var colored = column == 1;
+                var side = row == 0 ? AgentIndicatorPosition.Right : AgentIndicatorPosition.Left;
+                var card = new Rectangle(12 + column * 334, 70 + row * 138, 322, 126);
+                using var background = new SolidBrush(TaskbarColor);
+                graphics.FillRectangle(background, card);
+                graphics.DrawString($"Project colors {(colored ? "on" : "off")} · {side.ToString().ToLowerInvariant()}",
+                    captionFont, text, card.X + 12, card.Y + 8);
+                using var menu = new ContextMenuStrip();
+                using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+                widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
+                widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side,
+                    mode: AgentIndicatorMode.RepeatedIcons, useProjectColors: colored);
+                widget.SetSnapshot(snapshot);
+                widget.SetWorkingTasks(tasks);
+                using var preview = widget.RenderPreview(TaskbarColor, 1.6f);
+                graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 38);
+            }
+        gallery.Save(Path.Combine(outputDirectory, "project-colors-gallery.png"), ImageFormat.Png);
     }
 
     private static void RenderAgentLayoutGallery(string outputDirectory, UsageSnapshot snapshot)

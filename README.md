@@ -32,6 +32,7 @@ use unreleased features; check the changelog when using a release archive.
   animation and synchronization
 - Small (70%), Normal (100%), and Large (130%) agent indicators
 - Icon and number, or one spaced icon per running main task, expanding outward
+- Optional project colors for repeated task icons, matching Codex Desktop's palette
 - One widget on every connected display
 - Settings and per-monitor positions remembered in the current user profile
 - Optional start with Windows
@@ -103,6 +104,7 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Display mode** | Icon and number (default), or one icon per running main task |
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
+| **Display → Working agents → Use project colors** | Off by default; available in One icon per task mode to color each icon by its task's project |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
@@ -139,7 +141,15 @@ Enable **Synchronize icon animations** to keep all repeated icons in the same
 animation frame, including robot blinks and movement. Turn it off for staggered
 timing. The preference is saved and takes effect immediately.
 
+In **One icon per task** mode, enable **Use project colors** to use each main
+task's Codex project color. Tasks in the same project share a color. Colors stay
+with their task when icons expand on either side and refresh after a project is
+recolored. Tasks without a resolvable custom project color keep the usual blue.
+Icon-and-number mode keeps its usual color.
+
 ![Agent indicator sizes and display modes](docs/images/agent-layout-gallery.png)
+
+![Example project colors with repeated task icons](docs/images/project-colors-gallery.png)
 
 These galleries are static previews. See the [working-agent guide](docs/working-agents.md)
 for every default, all eleven icon styles, compatibility details, and troubleshooting.
@@ -165,6 +175,11 @@ versions; no minimum compatible Codex version has been established. If the files
 are missing or incompatible, an absent indicator does not prove all agents are idle.
 The monitor reads locally on a background thread and sends no model requests.
 Animation runs only while a visible widget has a nonzero count.
+Project coloring additionally reads Codex Desktop's local
+`.codex-global-state.json` when enabled in repeated-icon mode. It uses task-project
+assignments, workspace hints, and project roots to resolve colors. This desktop
+state format can change too; unavailable mappings fall back to the normal blue
+without affecting the main-task count.
 
 CodexTray checks `CODEXTRAY_CODEX_PATH`, then `PATH`, then the Codex Desktop
 installation below `%LOCALAPPDATA%\OpenAI\Codex\bin`.
@@ -199,6 +214,8 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - Agent activity reads local Codex session logs, which can contain conversation
   content, to inspect session metadata and turn lifecycle events. CodexTray does
   not upload, save, or log that content, and does not change session-file contents.
+- Project coloring reads local desktop project metadata only while enabled in
+  repeated-icon mode. It does not modify Codex's state or project settings.
 - No model prompts or generation requests
 - Network/authentication behavior is delegated to the installed Codex app server
 - Display preferences remain in the current user's Windows registry hive
@@ -213,6 +230,7 @@ dotnet build --configuration Release --no-restore
 dotnet run --configuration Release --no-build -- --self-test
 dotnet run --configuration Release --no-build -- --print
 dotnet run --configuration Release --no-build -- --print-activity
+dotnet run --configuration Release --no-build -- --print-activity --project-colors
 dotnet run --configuration Release --no-build -- --export-screenshots .\docs\images
 ```
 

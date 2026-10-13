@@ -31,6 +31,9 @@ synchronized/staggered timing. Check fullscreen video on one display while the
 other display's taskbar remains visible. Keep the
 [working-agent guide](docs/working-agents.md), README menu labels/defaults, and
 generated previews consistent with the implementation.
+For project colors, verify explicit assignments, worktree/root matching,
+projectless and missing-color fallbacks, live recoloring, and color association
+on both sides. Use synthetic project metadata and previews in public artifacts.
 
 ## Pull requests
 

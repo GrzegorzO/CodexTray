@@ -42,6 +42,18 @@ Repeated icons can share one animation phase or use an index-based phase offset.
 The synchronization preference applies immediately and is persisted, defaulting
 to the existing staggered timing.
 
+`ReadTasks` retains stable thread IDs and working directories alongside each
+main task's optional project color. Task IDs define a stable icon order across
+polls. When coloring is enabled in repeated-icon mode, `ProjectColorReader`
+reads `.codex-global-state.json` with shared read access and caches only the
+project-color/assignment metadata. File timestamp and length changes trigger
+reloads; partial writes preserve the last valid mapping. Explicit project
+assignments win over workspace hints and the longest unambiguous root match.
+Projectless or unmatched tasks and unsupported/default colors use the normal
+icon accent. Palette tokens use the desktop dark-sidebar RGB values. No desktop
+state is read for coloring while the option is off or in icon-and-number mode,
+and no Codex settings or state files are written.
+
 ## Refresh lifecycle
 
 ```text

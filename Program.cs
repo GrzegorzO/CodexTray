@@ -21,7 +21,17 @@ internal static class Program
     {
         if (args.Contains("--print-activity", StringComparer.OrdinalIgnoreCase))
         {
-            Console.WriteLine($"Running main tasks: {new AgentActivityMonitor().ReadCount(CancellationToken.None)}");
+            var includeColors = args.Contains("--project-colors", StringComparer.OrdinalIgnoreCase);
+            var tasks = new AgentActivityMonitor().ReadTasks(CancellationToken.None, includeColors);
+            Console.WriteLine($"Running main tasks: {tasks.Count}");
+            if (includeColors)
+            {
+                for (var index = 0; index < tasks.Count; index++)
+                {
+                    var value = tasks[index].ProjectColor is { } color ? $"#{color.R:X2}{color.G:X2}{color.B:X2}" : "default";
+                    Console.WriteLine($"Task {index + 1} icon color: {value}");
+                }
+            }
             return 0;
         }
 

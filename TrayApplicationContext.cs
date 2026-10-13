@@ -39,12 +39,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _agentCounterItem;
     private readonly ToolStripMenuItem _animateAgentsItem;
     private readonly ToolStripMenuItem _synchronizeAgentsItem;
+    private readonly ToolStripMenuItem _projectColorsItem;
     private readonly Dictionary<LoadingIconStyle, ToolStripMenuItem> _agentStyleItems = [];
     private readonly Dictionary<AgentIndicatorPosition, ToolStripMenuItem> _agentPositionItems = [];
     private readonly Dictionary<AgentIndicatorSize, ToolStripMenuItem> _agentSizeItems = [];
     private readonly Dictionary<AgentIndicatorMode, ToolStripMenuItem> _agentModeItems = [];
     private readonly List<Bitmap> _agentMenuImages = [];
     private int _workingAgentCount;
+    private IReadOnlyList<WorkingTask> _workingTasks = Array.Empty<WorkingTask>();
     private bool _readingActivity;
     private int _visibilityUpdatePending;
     private string? _activityError;
@@ -275,6 +277,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ApplyAgentSettings();
         };
         agentMenu.DropDownItems.Add(_synchronizeAgentsItem);
+        _projectColorsItem = new ToolStripMenuItem("Use project colors")
+        {
+            Checked = WidgetSettings.UseProjectColors,
+            CheckOnClick = true,
+            Enabled = WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons,
+            ToolTipText = "Use each main task's Codex project color in One icon per task mode."
+        };
+        _projectColorsItem.Click += (_, _) =>
+        {
+            WidgetSettings.UseProjectColors = _projectColorsItem.Checked;
+            ApplyAgentSettings();
+            _ = RefreshActivityAsync();
+        };
+        agentMenu.DropDownItems.Add(_projectColorsItem);
         var loadingStyleMenu = new ToolStripMenuItem("Loading icon style");
         foreach (var style in Enum.GetValues<LoadingIconStyle>())
         {
@@ -340,6 +356,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                     pair.Value.Checked = pair.Key == mode;
                 }
                 ApplyAgentSettings();
+                _ = RefreshActivityAsync();
             };
             _agentModeItems.Add(mode, item);
             agentModeMenu.DropDownItems.Add(item);
@@ -429,17 +446,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _readingActivity = true;
         try
         {
-            var count = await Task.Run(() => _activityMonitor.ReadCount(_shutdown.Token), _shutdown.Token);
+            var includeColors = _projectColorsItem.Checked &&
+                WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
+            var tasks = await Task.Run(() => _activityMonitor.ReadTasks(_shutdown.Token, includeColors), _shutdown.Token);
             if (_shutdown.IsCancellationRequested)
             {
                 return;
             }
 
             _activityError = null;
-            _workingAgentCount = count;
+            _workingTasks = tasks;
+            _workingAgentCount = tasks.Count;
             foreach (var widget in _widgets)
             {
-                widget.SetWorkingAgentCount(count);
+                widget.SetWorkingTasks(tasks);
             }
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
@@ -450,6 +470,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             _activityError = exception.Message;
             _workingAgentCount = 0;
+            _workingTasks = Array.Empty<WorkingTask>();
             foreach (var widget in _widgets)
             {
                 widget.SetWorkingAgentCount(0);
@@ -463,12 +484,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ApplyAgentSettings()
     {
+        _projectColorsItem.Enabled = WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
         foreach (var widget in _widgets)
         {
             widget.ApplyAgentSettings(WidgetSettings.ShowAgentCounter, WidgetSettings.AnimateAgentCounter,
                 WidgetSettings.SelectedLoadingIconStyle, WidgetSettings.SelectedAgentIndicatorPosition,
                 WidgetSettings.SelectedAgentIndicatorSize, WidgetSettings.SelectedAgentIndicatorMode,
-                WidgetSettings.SynchronizeAgentAnimations);
+                WidgetSettings.SynchronizeAgentAnimations, WidgetSettings.UseProjectColors);
         }
     }
 
@@ -704,7 +726,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             var widget = new TaskbarWidgetForm(menu, screen);
             widget.DetailsRequested += ShowDetails;
             widget.PlacementCustomized += (_, _) => UpdatePlacementChecks();
-            widget.SetWorkingAgentCount(_workingAgentCount);
+            widget.SetWorkingTasks(_workingTasks);
             widget.ApplyDisplaySettings(
                 WidgetSettings.SelectedStyle,
                 WidgetSettings.ShowLabels,

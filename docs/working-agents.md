@@ -35,6 +35,7 @@ immediately to widgets on all monitors and are saved under
 | Display mode | Icon and number | Show one icon plus the count, or choose **One icon per task** to replace the number with repeated icons. |
 | Animate loading icon | On | Animate the selected style. Turn off for a static frame. |
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
+| Use project colors | Off | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
 
 The indicator remains vertically centered at every size. Idle hiding is always
 applied; there is no visible zero-state icon or reserved gap.
@@ -57,6 +58,27 @@ With it off, each repeated icon has an offset. In icon-and-number mode there is
 only one activity icon, so the synchronization option has no visible effect.
 
 ![Static previews of the three sizes and both display modes](images/agent-layout-gallery.png)
+
+### Project colors
+
+Choose **Display mode → One icon per task**, then enable **Use project colors**.
+Each icon uses its main task's project color from Codex Desktop's dark-sidebar
+palette. Tasks in the same project use the same color; changing a project's
+color updates its running icons on the next activity check. Synchronization
+still controls animation timing independently of color.
+
+Icons keep their task/color association on either side of the battery group.
+The option is saved, starts off, and is unavailable in icon-and-number mode.
+Switching back to icon-and-number mode leaves the single icon its usual blue.
+
+A task's explicit project assignment takes priority, including when it runs in
+a worktree. When no assignment is available, workspace hints and matching local
+project roots can supply the mapping. The longest unambiguous root match wins.
+Projectless tasks, default/unsupported project colors, missing metadata, or
+unresolved project mappings fall back to the normal blue icon. These fallbacks
+do not remove the task from the count.
+
+![Static previews using sample green, yellow, and purple projects](images/project-colors-gallery.png)
 
 ### Icon styles
 
@@ -104,6 +126,14 @@ names, locking, or event format can affect detection independently of quota
 display. Remote/cloud-only work, ephemeral sessions, and other sessions without
 the required local files are not covered.
 
+When project coloring is enabled in repeated-icon mode, CodexTray also reads
+`.codex-global-state.json` from the same Codex home directory. It interprets
+project appearances, task-project assignments, project-ID aliases, workspace
+hints, and local project roots. The desktop state file is not modified. Its
+format is also an implementation detail; incompatible or unavailable color
+metadata falls back to blue. Codex CLI-only installations can still show the
+main-task count without desktop project colors.
+
 Session logs can contain prompts, responses, and tool output. CodexTray reads
 the files to interpret session type, parent links, lifecycle event types, and
 turn IDs. It keeps paths, read offsets, and current turn state in memory; it does
@@ -121,6 +151,8 @@ Activity checks do not start a model request or consume Codex tokens.
 | The count is higher than the number of chats being watched | Check for other local main tasks, including separate CLI sessions or manually forked main chats. Subagents and background helpers are excluded. |
 | Icons do not animate together | Enable **Synchronize icon animations**. It is off by default and only has a visible effect with repeated icons. |
 | Icons are static | Enable **Animate loading icon**. Animation stops while the widget is hidden or idle. |
+| Use project colors is unavailable | Select **Display mode → One icon per task** first. The option does not apply to the single icon-and-number display. |
+| A task icon remains blue with project colors enabled | Confirm the project has a supported custom color in Codex Desktop and the app state is available under the same `CODEX_HOME`. Projectless, default-colored, or unmatched tasks intentionally use blue. |
 | A widget disappears during fullscreen video | Expected on the monitor whose taskbar is covered. A visible taskbar on another monitor should retain its widget. Auto-hidden taskbars also hide their widgets. |
 | The widget flickers on another monitor during fullscreen video | Use a build containing the fullscreen flicker fix. If it persists, report monitor layout, display scaling, video/browser details, and widget settings. |
 
@@ -129,6 +161,15 @@ From a source checkout, inspect the detected count without starting the UI:
 ```powershell
 dotnet run --configuration Release -- --print-activity
 ```
+
+To inspect resolved colors as well, add `--project-colors`:
+
+```powershell
+dotnet run --configuration Release -- --print-activity --project-colors
+```
+
+The diagnostic prints the count and an RGB color or `default` for each task in
+icon order. It does not print task titles, project names, or working directories.
 
 For a [public bug report](https://github.com/GrzegorzO/CodexTray/issues/new?template=bug_report.yml),
 include the CodexTray build or commit, Codex version, display configuration,
