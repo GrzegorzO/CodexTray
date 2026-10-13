@@ -484,8 +484,26 @@ internal static class SelfTest
                     tinted |= pixel.G > pixel.R * 2 && pixel.G > pixel.B;
                 }
             Assert(tinted, $"{marker.Value} draws a visible project-colored marker");
-            Assert(bitmap.GetPixel(0, 0).A == 0, "project symbols have no badge background");
         }
+
+        // A glyph can legitimately touch its canvas corner, especially when a
+        // Windows Server font substitutes an emoji. Use the known empty interior
+        // of the built-in folder to detect an unwanted badge background.
+        using var transparentMarker = new Bitmap(28, 28);
+        using (var graphics = Graphics.FromImage(transparentMarker))
+        {
+            ProjectMarkerRenderer.Draw(graphics, new RectangleF(4, 4, 20, 20),
+                new ProjectMarker("unknown"), colors[0]!.Value);
+        }
+        Assert(transparentMarker.GetPixel(14, 16).A == 0, "the folder's empty interior has no badge background");
+        for (var x = 0; x < transparentMarker.Width; x++)
+            for (var y = 0; y < transparentMarker.Height; y++)
+            {
+                if (x < 4 || x >= 24 || y < 4 || y >= 24)
+                {
+                    Assert(transparentMarker.GetPixel(x, y).A == 0, "project symbols leave the surrounding canvas transparent");
+                }
+            }
 
         static bool SamePixels(Bitmap first, Bitmap second)
         {

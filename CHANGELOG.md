@@ -27,6 +27,8 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Check project-badge transparency independently of font-specific glyph corners
+  so the self-test also works on Windows Server CI runners
 - New working-task icons append at the outer edge instead of reshuffling
   existing tasks by ID
 
