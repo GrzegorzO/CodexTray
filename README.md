@@ -21,10 +21,14 @@ browser, no Electron runtime, no telemetry, and no model request on refresh.
 - Optional percentages and left- or right-side labels
 - Percentages centered in, or placed to the left or right of, the batteries
 - Left, right, or per-monitor custom taskbar placement
+- Live working-agent count with eleven loading icons, including an animated robot head; hidden entirely when idle
+- Counter at the far left or right (default), centered vertically, with optional animation
+- Small (70%), Normal (100%), and Large (130%) agent indicators
+- Icon and number, or one spaced icon per working agent, expanding outward
 - One widget on every connected display
 - Settings and per-monitor positions remembered in the current user profile
 - Optional start with Windows
-- Refreshes every two minutes without repainting unchanged values
+- Usage refreshes every two minutes without repainting unchanged values; agent activity updates every second
 - Transparent taskbar surface with event-driven z-order recovery after overlays
 - Uses the existing local Codex sign-in; it never reads or stores credentials
 
@@ -84,11 +88,35 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Label position** | Labels on the left or right |
 | **Display → Show percentages** | Show or hide percentage values |
 | **Display → Percentage position** | Left, centered, or right with collision-free label spacing |
+| **Display → Working agents → Show counter when working** | Enable or disable the activity indicator (enabled by default) |
+| **Display → Working agents → Loading icon style** | Eleven styles: Rotating arc (default), Orbiting dots, Pulsing dot, Animated bars, Spinning spokes, Bouncing dots, Ripple rings, Rotating diamond, Radar sweep, Hourglass, and Robot head |
+| **Display → Working agents → Counter position** | Right of all controls (default) or left of all controls |
+| **Display → Working agents → Indicator size** | Small (70%), Normal (100%, default), or Large (130%) |
+| **Display → Working agents → Display mode** | Icon and number (default), or one icon per working agent |
+| **Display → Working agents → Animate loading icon** | Toggle animation, including a static option for reduced motion |
+| **Display → Working agents → Synchronize icon animations** | Animate repeated icons in step, or keep staggered timing (default) |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
 Display and placement settings are stored under `HKCU\Software\CodexTray`.
 All display settings and per-monitor offsets are read again when the app starts.
+
+![Working-agent loading icon choices](docs/images/working-agents-gallery.png)
+
+The activity indicator shows an icon and the number of active local Codex threads,
+including working subagents. It is vertically centered beside the full battery,
+label, and percentage group. At zero, both the icon and count disappear and the
+widget releases that space. Turning off animation keeps the selected icon static.
+Size scales the indicator's icons, count, and spacing; the usage batteries keep
+their existing size. In **One icon per agent** mode, two agents show two icons
+with no number. Additional icons extend rightward on the right side and leftward
+on the left side. The battery group stays anchored while space is available;
+at a taskbar boundary the widget moves enough to fit.
+Enable **Synchronize icon animations** to keep all repeated icons in the same
+animation frame, including robot blinks and movement. Turn it off for staggered
+timing. The preference is saved and takes effect immediately.
+
+![Agent indicator sizes and display modes](docs/images/agent-layout-gallery.png)
 
 The additional styles use familiar visual conventions: **Fluent** follows
 [Windows' 4-pixel rounded bar geometry](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/geometry),
@@ -102,6 +130,15 @@ Every two minutes, CodexTray starts the locally installed Codex app server,
 performs its initialization handshake, and requests `account/rateLimits/read`.
 This reads account quota state; it does not send a model prompt or consume Codex
 tokens. The process is closed immediately after the response.
+
+Agent activity is read separately from local Codex session lifecycle events and
+thread writer locks under `CODEX_HOME` (or `%USERPROFILE%\.codex`). A running turn
+counts once; completion or interruption removes it. A released writer lock also
+removes it, so a crashed Codex process cannot leave a phantom count. Loaded idle
+threads do not count. This requires Codex's local writer-lock/session format;
+remote/cloud-only tasks and sessions without those files are not included.
+The monitor reads locally on a background thread and sends no model requests.
+Animation runs only while a visible widget has a nonzero count.
 
 CodexTray checks `CODEXTRAY_CODEX_PATH`, then `PATH`, then the Codex Desktop
 installation below `%LOCALAPPDATA%\OpenAI\Codex\bin`.
@@ -146,6 +183,7 @@ dotnet format --verify-no-changes --no-restore
 dotnet build --configuration Release --no-restore
 dotnet run --configuration Release --no-build -- --self-test
 dotnet run --configuration Release --no-build -- --print
+dotnet run --configuration Release --no-build -- --print-activity
 dotnet run --configuration Release --no-build -- --export-screenshots .\docs\images
 ```
 

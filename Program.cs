@@ -19,6 +19,12 @@ internal static class Program
 
     private static int Run(string[] args)
     {
+        if (args.Contains("--print-activity", StringComparer.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"Working local agents: {new AgentActivityMonitor().ReadCount(CancellationToken.None)}");
+            return 0;
+        }
+
         if (args.Contains("--print", StringComparer.OrdinalIgnoreCase))
         {
             return PrintUsageAsync().GetAwaiter().GetResult();

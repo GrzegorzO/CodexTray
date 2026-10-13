@@ -45,6 +45,8 @@ internal static class ScreenshotExporter
                 "time-left-gallery.png",
                 DrawCountdownCard,
                 exportIndividualStyles: false);
+            RenderAgentGallery(outputDirectory, snapshot);
+            RenderAgentLayoutGallery(outputDirectory, snapshot);
             return 0;
         }
         catch (Exception exception)
@@ -52,6 +54,77 @@ internal static class ScreenshotExporter
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void RenderAgentLayoutGallery(string outputDirectory, UsageSnapshot snapshot)
+    {
+        using var gallery = new Bitmap(1080, 500);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
+        using var captionFont = new Font("Segoe UI", 9);
+        using var text = new SolidBrush(Color.White);
+        graphics.DrawString("Working agents · sizes and display modes", titleFont, text, 18, 12);
+        graphics.DrawString("Three agents · icons grow outward from the battery controls", captionFont, text, 18, 40);
+        AgentIndicatorSize[] sizes = [AgentIndicatorSize.Small, AgentIndicatorSize.Normal, AgentIndicatorSize.Large];
+        for (var row = 0; row < 3; row++)
+            for (var column = 0; column < sizes.Length; column++)
+            {
+                var size = sizes[column];
+                var mode = row == 0 ? AgentIndicatorMode.IconAndNumber : AgentIndicatorMode.RepeatedIcons;
+                var side = row == 2 ? AgentIndicatorPosition.Left : AgentIndicatorPosition.Right;
+                var card = new Rectangle(12 + column * 356, 70 + row * 142, 344, 130);
+                using var background = new SolidBrush(TaskbarColor);
+                graphics.FillRectangle(background, card);
+                var sizeTitle = $"{size} ({AgentIndicatorRenderer.ScaleFor(size):P0})";
+                var modeTitle = row == 0 ? "Icon + number" : $"Icons · {side.ToString().ToLowerInvariant()}";
+                graphics.DrawString($"{sizeTitle} · {modeTitle}", captionFont, text, card.X + 12, card.Y + 8);
+                using var menu = new ContextMenuStrip();
+                using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+                widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
+                widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, size, mode);
+                widget.SetSnapshot(snapshot);
+                widget.SetWorkingAgentCount(3);
+                using var preview = widget.RenderPreview(TaskbarColor, 1.6f);
+                graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 38);
+            }
+        gallery.Save(Path.Combine(outputDirectory, "agent-layout-gallery.png"), ImageFormat.Png);
+    }
+
+    private static void RenderAgentGallery(string outputDirectory, UsageSnapshot snapshot)
+    {
+        var styles = Enum.GetValues<LoadingIconStyle>();
+        var rows = (styles.Length + 1) / 2;
+        using var gallery = new Bitmap(680, 70 + rows * 138 + 12);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
+        using var captionFont = new Font("Segoe UI", 9);
+        using var titleBrush = new SolidBrush(Color.White);
+        using var captionBrush = new SolidBrush(Color.FromArgb(170, 178, 190));
+        graphics.DrawString("Working agents · loading icon options", titleFont, titleBrush, 18, 12);
+        graphics.DrawString("Right by default · vertically centered · hidden when idle", captionFont, captionBrush, 18, 39);
+        for (var index = 0; index < styles.Length; index++)
+        {
+            var card = new Rectangle(12 + index % 2 * 334, 70 + index / 2 * 138, 322, 126);
+            using var brush = new SolidBrush(TaskbarColor);
+            graphics.FillRectangle(brush, card);
+            graphics.DrawString(AgentIndicatorRenderer.Title(styles[index]), captionFont, titleBrush, card.X + 12, card.Y + 8);
+            using var menu = new ContextMenuStrip();
+            using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+            widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
+            widget.ApplyAgentSettings(true, false, styles[index], AgentIndicatorPosition.Right);
+            widget.SetSnapshot(snapshot);
+            widget.SetWorkingAgentCount(3);
+            using var preview = widget.RenderPreview(TaskbarColor);
+            graphics.DrawImage(preview, new Rectangle(card.X + 20, card.Y + 30, preview.Width, preview.Height));
+            if (styles[index] == LoadingIconStyle.Robot)
+            {
+                preview.Save(Path.Combine(outputDirectory, "robot-head.png"), ImageFormat.Png);
+            }
+        }
+
+        gallery.Save(Path.Combine(outputDirectory, "working-agents-gallery.png"), ImageFormat.Png);
     }
 
     private static void RenderGallery(
@@ -74,7 +147,7 @@ internal static class ScreenshotExporter
         {
             var style = styles[index];
             using var menu = new ContextMenuStrip();
-            using var widget = new TaskbarWidgetForm(menu, targetScreen);
+            using var widget = new TaskbarWidgetForm(menu, targetScreen, loadSettings: false);
             widget.ApplyDisplaySettings(
                 style,
                 showLabels: true,

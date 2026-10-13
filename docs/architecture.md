@@ -11,6 +11,33 @@ areas:
 4. `TrayApplicationContext`, `WidgetSettings`, and `StartupManager` coordinate
    refreshes, menus, monitors, persisted preferences, and application lifetime.
 
+`AgentActivityMonitor` independently observes local session lifecycle events and
+writer locks once per second. Codex runtime status is scoped to the app-server
+owning each thread, so the short-lived quota server cannot supply desktop-wide
+activity. The monitor caches rollout paths and committed byte offsets, ignores
+incomplete JSONL writes, and counts a thread only when its writer lock is held
+and its latest turn has started without completing or aborting. Released locks
+clear cached activity after process exit. Only lifecycle fields are interpreted;
+conversation content is neither retained nor logged. This local file format is
+an implementation dependency and does not cover remote-only or ephemeral work.
+
+`AgentIndicatorRenderer` draws eleven native loading styles, including a robot
+head with blinking eyes, a glowing antenna, and a gentle bob over a slower
+3.6-second cycle. Widgets reserve a separate strip at the selected outer edge
+and collapse it completely at zero. The animation timer invalidates only the
+indicator strip while visible and active; the reduced-motion setting draws a
+static frame. Counter visibility, style, motion,
+and side use the same per-user registry settings as the existing display options.
+Indicator size scales the native drawing by 0.7, 1.0, or 1.3, including the count
+and spacing. Repeated-icon mode reserves one slot per working agent and reverses
+slot order on the left, keeping the first icon nearest the battery controls.
+The battery group stays anchored during activity resizing where taskbar bounds
+permit it. Size and mode are also persisted, defaulting to Normal and icon/count
+for existing installations.
+Repeated icons can share one animation phase or use an index-based phase offset.
+The synchronization preference applies immediately and is persisted, defaulting
+to the existing staggered timing.
+
 ## Refresh lifecycle
 
 ```text

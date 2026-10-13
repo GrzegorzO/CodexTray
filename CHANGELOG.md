@@ -8,6 +8,17 @@ All notable changes are documented here. This project follows
 ### Added
 
 - Purple battery color for the final 5% of remaining usage
+- Working local-agent counter with eleven loading styles: rotating arc, orbiting
+  dots, pulsing dot, animated bars, spinning spokes, bouncing dots, ripple rings,
+  rotating diamond, radar sweep, hourglass, and an animated robot head; hidden
+  without spacing when idle
+- Saved counter visibility, animation, and far-left/far-right placement settings
+  with right-side placement by default
+- Local activity diagnostics via `--print-activity` and a loading-style gallery
+- Small (70%), Normal (100%), and Large (130%) agent-indicator sizes
+- One-icon-per-agent mode with spaced icons growing outward on either side
+- Saved synchronization toggle for repeated icons, with staggered timing retained
+  by default
 
 ### Fixed
 

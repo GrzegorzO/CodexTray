@@ -34,6 +34,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly List<TaskbarWidgetForm> _widgets = [];
     private readonly System.Windows.Forms.Timer _timer;
     private readonly System.Windows.Forms.Timer _visibilityTimer;
+    private readonly System.Windows.Forms.Timer _activityTimer;
+    private readonly AgentActivityMonitor _activityMonitor = new();
+    private readonly ToolStripMenuItem _agentCounterItem;
+    private readonly ToolStripMenuItem _animateAgentsItem;
+    private readonly ToolStripMenuItem _synchronizeAgentsItem;
+    private readonly Dictionary<LoadingIconStyle, ToolStripMenuItem> _agentStyleItems = [];
+    private readonly Dictionary<AgentIndicatorPosition, ToolStripMenuItem> _agentPositionItems = [];
+    private readonly Dictionary<AgentIndicatorSize, ToolStripMenuItem> _agentSizeItems = [];
+    private readonly Dictionary<AgentIndicatorMode, ToolStripMenuItem> _agentModeItems = [];
+    private readonly List<Bitmap> _agentMenuImages = [];
+    private int _workingAgentCount;
+    private bool _readingActivity;
+    private string? _activityError;
     private readonly ContextMenuStrip _menu;
     private readonly SynchronizationContext _uiContext;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -226,6 +239,133 @@ internal sealed class TrayApplicationContext : ApplicationContext
         displayMenu.DropDownItems.Add(labelPositionMenu);
         displayMenu.DropDownItems.Add(_percentagesItem);
         displayMenu.DropDownItems.Add(percentagePositionMenu);
+        var agentMenu = new ToolStripMenuItem("Working agents");
+        _agentCounterItem = new ToolStripMenuItem("Show counter when working")
+        {
+            Checked = WidgetSettings.ShowAgentCounter,
+            CheckOnClick = true
+        };
+        _agentCounterItem.Click += (_, _) =>
+        {
+            WidgetSettings.ShowAgentCounter = _agentCounterItem.Checked;
+            ApplyAgentSettings();
+            _ = RefreshActivityAsync();
+        };
+        _animateAgentsItem = new ToolStripMenuItem("Animate loading icon")
+        {
+            Checked = WidgetSettings.AnimateAgentCounter,
+            CheckOnClick = true
+        };
+        _animateAgentsItem.Click += (_, _) =>
+        {
+            WidgetSettings.AnimateAgentCounter = _animateAgentsItem.Checked;
+            ApplyAgentSettings();
+        };
+        agentMenu.DropDownItems.Add(_agentCounterItem);
+        agentMenu.DropDownItems.Add(_animateAgentsItem);
+        _synchronizeAgentsItem = new ToolStripMenuItem("Synchronize icon animations")
+        {
+            Checked = WidgetSettings.SynchronizeAgentAnimations,
+            CheckOnClick = true,
+            ToolTipText = "Animate repeated icons together; turn off for staggered animations."
+        };
+        _synchronizeAgentsItem.Click += (_, _) =>
+        {
+            WidgetSettings.SynchronizeAgentAnimations = _synchronizeAgentsItem.Checked;
+            ApplyAgentSettings();
+        };
+        agentMenu.DropDownItems.Add(_synchronizeAgentsItem);
+        var loadingStyleMenu = new ToolStripMenuItem("Loading icon style");
+        foreach (var style in Enum.GetValues<LoadingIconStyle>())
+        {
+            var image = new Bitmap(24, 24);
+            using (var graphics = Graphics.FromImage(image))
+            {
+                AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 48, 24), 1, style, 0.25f);
+            }
+            _agentMenuImages.Add(image);
+            var item = new ToolStripMenuItem(AgentIndicatorRenderer.Title(style), image)
+            {
+                Checked = WidgetSettings.SelectedLoadingIconStyle == style
+            };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.SelectedLoadingIconStyle = style;
+                foreach (var pair in _agentStyleItems)
+                {
+                    pair.Value.Checked = pair.Key == style;
+                }
+                ApplyAgentSettings();
+            };
+            _agentStyleItems.Add(style, item);
+            loadingStyleMenu.DropDownItems.Add(item);
+        }
+        agentMenu.DropDownItems.Add(loadingStyleMenu);
+        var agentSizeMenu = new ToolStripMenuItem("Indicator size");
+        foreach (var size in Enum.GetValues<AgentIndicatorSize>())
+        {
+            var title = size switch
+            {
+                AgentIndicatorSize.Small => "Small (70%)",
+                AgentIndicatorSize.Large => "Large (130%)",
+                _ => "Normal (100%, default)"
+            };
+            var item = new ToolStripMenuItem(title) { Checked = WidgetSettings.SelectedAgentIndicatorSize == size };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.SelectedAgentIndicatorSize = size;
+                foreach (var pair in _agentSizeItems)
+                {
+                    pair.Value.Checked = pair.Key == size;
+                }
+                ApplyAgentSettings();
+            };
+            _agentSizeItems.Add(size, item);
+            agentSizeMenu.DropDownItems.Add(item);
+        }
+        agentMenu.DropDownItems.Add(agentSizeMenu);
+        var agentModeMenu = new ToolStripMenuItem("Display mode");
+        foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
+        {
+            var item = new ToolStripMenuItem(mode == AgentIndicatorMode.IconAndNumber
+                ? "Icon and number (default)" : "One icon per agent")
+            {
+                Checked = WidgetSettings.SelectedAgentIndicatorMode == mode
+            };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.SelectedAgentIndicatorMode = mode;
+                foreach (var pair in _agentModeItems)
+                {
+                    pair.Value.Checked = pair.Key == mode;
+                }
+                ApplyAgentSettings();
+            };
+            _agentModeItems.Add(mode, item);
+            agentModeMenu.DropDownItems.Add(item);
+        }
+        agentMenu.DropDownItems.Add(agentModeMenu);
+        var agentPositionMenu = new ToolStripMenuItem("Counter position");
+        foreach (var position in Enum.GetValues<AgentIndicatorPosition>())
+        {
+            var item = new ToolStripMenuItem(position == AgentIndicatorPosition.Right ? "Right of all controls (default)" : "Left of all controls")
+            {
+                Checked = WidgetSettings.SelectedAgentIndicatorPosition == position
+            };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.SelectedAgentIndicatorPosition = position;
+                foreach (var pair in _agentPositionItems)
+                {
+                    pair.Value.Checked = pair.Key == position;
+                }
+                ApplyAgentSettings();
+            };
+            _agentPositionItems.Add(position, item);
+            agentPositionMenu.DropDownItems.Add(item);
+        }
+        agentMenu.DropDownItems.Add(agentPositionMenu);
+        displayMenu.DropDownItems.Add(agentMenu);
         displayMenu.DropDownItems.Add(new ToolStripSeparator());
         displayMenu.DropDownItems.Add(new ToolStripMenuItem($"Refresh interval: {RefreshIntervalMinutes} minutes")
         {
@@ -270,8 +410,66 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _visibilityTimer.Tick += (_, _) => UpdateWidgetVisibility();
         _visibilityTimer.Start();
 
+        _activityTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _activityTimer.Tick += async (_, _) => await RefreshActivityAsync();
+        _activityTimer.Start();
+
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         _ = RefreshAsync(showErrors: false);
+        _ = RefreshActivityAsync();
+    }
+
+    private async Task RefreshActivityAsync()
+    {
+        if (_readingActivity || _shutdown.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _readingActivity = true;
+        try
+        {
+            var count = await Task.Run(() => _activityMonitor.ReadCount(_shutdown.Token), _shutdown.Token);
+            if (_shutdown.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _activityError = null;
+            _workingAgentCount = count;
+            foreach (var widget in _widgets)
+            {
+                widget.SetWorkingAgentCount(count);
+            }
+        }
+        catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
+        {
+            // The background read is cancelled before widgets are disposed.
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _activityError = exception.Message;
+            _workingAgentCount = 0;
+            foreach (var widget in _widgets)
+            {
+                widget.SetWorkingAgentCount(0);
+            }
+        }
+        finally
+        {
+            _readingActivity = false;
+        }
+    }
+
+    private void ApplyAgentSettings()
+    {
+        foreach (var widget in _widgets)
+        {
+            widget.ApplyAgentSettings(WidgetSettings.ShowAgentCounter, WidgetSettings.AnimateAgentCounter,
+                WidgetSettings.SelectedLoadingIconStyle, WidgetSettings.SelectedAgentIndicatorPosition,
+                WidgetSettings.SelectedAgentIndicatorSize, WidgetSettings.SelectedAgentIndicatorMode,
+                WidgetSettings.SynchronizeAgentAnimations);
+        }
     }
 
     private async Task RefreshAsync(bool showErrors)
@@ -330,6 +528,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var text = _lastError is not null
             ? $"Could not read Codex usage.{Environment.NewLine}{Environment.NewLine}{_lastError}"
             : _snapshot?.ToDisplayText() ?? "Codex usage is still loading.";
+
+        text += _activityError is null
+            ? $"{Environment.NewLine}{Environment.NewLine}Working local agents: {_workingAgentCount}"
+            : $"{Environment.NewLine}{Environment.NewLine}Agent activity unavailable: {_activityError}";
 
         _notifyIcon.BalloonTipTitle = "Codex usage";
         _notifyIcon.BalloonTipText = text;
@@ -485,6 +687,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             var widget = new TaskbarWidgetForm(menu, screen);
             widget.DetailsRequested += ShowDetails;
             widget.PlacementCustomized += (_, _) => UpdatePlacementChecks();
+            widget.SetWorkingAgentCount(_workingAgentCount);
             widget.ApplyDisplaySettings(
                 WidgetSettings.SelectedStyle,
                 WidgetSettings.ShowLabels,
@@ -511,6 +714,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _timer.Stop();
         _visibilityTimer.Stop();
+        _activityTimer.Stop();
         _shutdown.Cancel();
         _foregroundWindowMonitor.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -524,6 +728,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _currentIcon?.Dispose();
+        _activityTimer.Dispose();
+        foreach (var image in _agentMenuImages)
+        {
+            image.Dispose();
+        }
+        _menu.Dispose();
         ExitThread();
     }
 

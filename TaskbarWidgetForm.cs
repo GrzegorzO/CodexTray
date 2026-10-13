@@ -59,6 +59,7 @@ internal sealed class TaskbarWidgetForm : Form
     private static readonly Color TransparentSurface = Color.FromArgb(1, 0, 1);
     private readonly ToolTip _tooltip = new();
     private readonly System.Windows.Forms.Timer _countdownTimer;
+    private readonly System.Windows.Forms.Timer _animationTimer;
     private readonly Screen _targetScreen;
     private bool _dragging;
     private int _dragStartMouseX;
@@ -67,21 +68,51 @@ internal sealed class TaskbarWidgetForm : Form
     private bool _isError;
     private string? _errorMessage;
     private (string FiveHour, string Weekly)? _lastCountdownLabels;
+    private int _workingAgentCount;
 
-    public DisplayStyle Style { get; private set; } = WidgetSettings.SelectedStyle;
-    public bool ShowLabels { get; private set; } = WidgetSettings.ShowLabels;
-    public bool ShowPercentages { get; private set; } = WidgetSettings.ShowPercentages;
-    public LabelContentMode LabelMode { get; private set; } = WidgetSettings.SelectedLabelMode;
-    public LabelPosition LabelSide { get; private set; } = WidgetSettings.SelectedLabelPosition;
-    public PercentagePosition PercentageSide { get; private set; } = WidgetSettings.SelectedPercentagePosition;
+    internal bool ShowAgentCounter { get; private set; } = true;
+    internal bool AnimateAgentCounter { get; private set; } = true;
+    internal LoadingIconStyle AgentIconStyle { get; private set; }
+    internal AgentIndicatorPosition AgentCounterSide { get; private set; }
+    internal AgentIndicatorSize AgentCounterSize { get; private set; }
+    internal AgentIndicatorMode AgentCounterMode { get; private set; }
+    internal bool SynchronizeAgentAnimations { get; private set; }
+    internal int AgentCounterWidth => ShowAgentCounter
+        ? AgentIndicatorRenderer.WidthFor(_workingAgentCount, AgentCounterSize, AgentCounterMode) : 0;
+    internal Rectangle AgentCounterBounds => new(
+        AgentCounterSide == AgentIndicatorPosition.Left ? 0 : ClientSize.Width - AgentCounterWidth,
+        0, AgentCounterWidth, ClientSize.Height);
+
+    public DisplayStyle Style { get; private set; }
+    public bool ShowLabels { get; private set; } = true;
+    public bool ShowPercentages { get; private set; } = true;
+    public LabelContentMode LabelMode { get; private set; }
+    public LabelPosition LabelSide { get; private set; }
+    public PercentagePosition PercentageSide { get; private set; } = PercentagePosition.Center;
 
     public event EventHandler? DetailsRequested;
     public event EventHandler? PlacementCustomized;
 
     public string ScreenDeviceName => _targetScreen.DeviceName;
-    public TaskbarWidgetForm(ContextMenuStrip menu, Screen targetScreen)
+    public TaskbarWidgetForm(ContextMenuStrip menu, Screen targetScreen, bool loadSettings = true)
     {
         _targetScreen = targetScreen;
+        if (loadSettings)
+        {
+            Style = WidgetSettings.SelectedStyle;
+            ShowLabels = WidgetSettings.ShowLabels;
+            ShowPercentages = WidgetSettings.ShowPercentages;
+            LabelMode = WidgetSettings.SelectedLabelMode;
+            LabelSide = WidgetSettings.SelectedLabelPosition;
+            PercentageSide = WidgetSettings.SelectedPercentagePosition;
+            ShowAgentCounter = WidgetSettings.ShowAgentCounter;
+            AnimateAgentCounter = WidgetSettings.AnimateAgentCounter;
+            AgentIconStyle = WidgetSettings.SelectedLoadingIconStyle;
+            AgentCounterSide = WidgetSettings.SelectedAgentIndicatorPosition;
+            AgentCounterSize = WidgetSettings.SelectedAgentIndicatorSize;
+            AgentCounterMode = WidgetSettings.SelectedAgentIndicatorMode;
+            SynchronizeAgentAnimations = WidgetSettings.SynchronizeAgentAnimations;
+        }
         _tooltip.InitialDelay = 250;
         _tooltip.ReshowDelay = 100;
         _tooltip.AutoPopDelay = 10_000;
@@ -115,6 +146,99 @@ internal sealed class TaskbarWidgetForm : Form
         _countdownTimer = new System.Windows.Forms.Timer { Interval = 60_000 };
         _countdownTimer.Tick += (_, _) => RefreshCountdownIfChanged();
         _countdownTimer.Start();
+        _animationTimer = new System.Windows.Forms.Timer { Interval = 50 };
+        _animationTimer.Tick += (_, _) => Invalidate(AgentCounterBounds);
+    }
+
+    internal void SetWorkingAgentCount(int count)
+    {
+        count = Math.Max(0, count);
+        if (_workingAgentCount == count)
+        {
+            return;
+        }
+
+        var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
+        _workingAgentCount = count;
+        UpdateAgentPresentation(previousLeftInset);
+    }
+
+    internal void ApplyAgentSettings(bool show, bool animate, LoadingIconStyle style, AgentIndicatorPosition side,
+        AgentIndicatorSize size = AgentIndicatorSize.Normal, AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
+        bool synchronizeAnimations = false)
+    {
+        var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
+        ShowAgentCounter = show;
+        AnimateAgentCounter = animate;
+        AgentIconStyle = style;
+        AgentCounterSide = side;
+        AgentCounterSize = size;
+        AgentCounterMode = mode;
+        SynchronizeAgentAnimations = synchronizeAnimations;
+        UpdateAgentPresentation(previousLeftInset);
+    }
+
+    private void UpdateAgentPresentation(int previousLeftInset)
+    {
+        UpdateWidth(previousLeftInset);
+        UpdateTooltip();
+        UpdateAnimation();
+        Invalidate();
+    }
+
+    private void UpdateWidth(int? previousLeftInset = null)
+    {
+        var width = GetDesiredWidth(ShowLabels, ShowPercentages, LabelMode, PercentageSide) + AgentCounterWidth;
+        if (ClientSize.Width == width)
+        {
+            return;
+        }
+
+        ClientSize = new Size(width, ClientSize.Height);
+        if (Visible)
+        {
+            if (previousLeftInset.HasValue)
+            {
+                var taskbar = _targetScreen.Bounds;
+                var hasTaskbar = TryGetTaskbar(_targetScreen, out var handle, out var actualTaskbar);
+                if (hasTaskbar)
+                {
+                    taskbar = actualTaskbar;
+                }
+                var gap = ScaleLogical(EdgeGap);
+                var maxX = hasTaskbar ? GetRightSideX(handle, taskbar, gap) : taskbar.Right - Width - gap;
+                var newLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
+                var minX = taskbar.Left + gap;
+                Location = new Point(Math.Clamp(Location.X + previousLeftInset.Value - newLeftInset, minX, Math.Max(minX, maxX)), Location.Y);
+            }
+            else
+            {
+                PlaceBesideWeather();
+            }
+        }
+    }
+
+    private void UpdateTooltip()
+    {
+        var text = _isError ? $"Codex usage error: {_errorMessage}" : _snapshot?.ToTooltip() ?? "Codex usage is still loading.";
+        if (AgentCounterWidth > 0)
+        {
+            text += $"\n{_workingAgentCount} working {(_workingAgentCount == 1 ? "agent" : "agents")}";
+        }
+
+        _tooltip.SetToolTip(this, text);
+        AccessibleName = text;
+    }
+
+    private void UpdateAnimation() => _animationTimer.Enabled = Visible && AgentCounterWidth > 0 && AnimateAgentCounter;
+
+    protected override void OnVisibleChanged(EventArgs eventArgs)
+    {
+        base.OnVisibleChanged(eventArgs);
+        if (_animationTimer is not null)
+        {
+            UpdateAnimation();
+        }
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -142,7 +266,7 @@ internal sealed class TaskbarWidgetForm : Form
         _isError = false;
         _errorMessage = null;
         _lastCountdownLabels = CurrentCountdownLabels();
-        _tooltip.SetToolTip(this, snapshot.ToTooltip());
+        UpdateTooltip();
         Invalidate();
     }
 
@@ -155,7 +279,7 @@ internal sealed class TaskbarWidgetForm : Form
 
         _isError = true;
         _errorMessage = message;
-        _tooltip.SetToolTip(this, $"Codex usage error: {message}");
+        UpdateTooltip();
         Invalidate();
     }
 
@@ -179,18 +303,9 @@ internal sealed class TaskbarWidgetForm : Form
         LabelMode = labelMode;
         LabelSide = labelPosition;
         PercentageSide = percentagePosition;
-        var desiredWidth = GetDesiredWidth(showLabels, showPercentages, labelMode, percentagePosition);
-        var sizeChanged = ClientSize.Width != desiredWidth;
-        if (sizeChanged)
-        {
-            ClientSize = new Size(desiredWidth, ClientSize.Height);
-        }
+        UpdateWidth();
         _lastCountdownLabels = CurrentCountdownLabels();
         Invalidate();
-        if (sizeChanged && Visible)
-        {
-            PlaceBesideWeather();
-        }
     }
 
     public void PlaceBesideWeather()
@@ -380,14 +495,30 @@ internal sealed class TaskbarWidgetForm : Form
     {
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
 
+        var state = graphics.Save();
+        if (AgentCounterSide == AgentIndicatorPosition.Left)
+        {
+            graphics.TranslateTransform(AgentCounterWidth, 0);
+        }
+
         DrawRow(graphics, "5h", 3, _snapshot?.FiveHour);
         DrawRow(graphics, "7d", 22, _snapshot?.Weekly);
 
         if (_isError)
         {
             using var pen = new Pen(Color.FromArgb(235, 65, 65), 3);
-            graphics.DrawLine(pen, Width - 15, 4, Width - 4, 15);
-            graphics.DrawLine(pen, Width - 4, 4, Width - 15, 15);
+            var contentWidth = ClientSize.Width - AgentCounterWidth;
+            graphics.DrawLine(pen, contentWidth - 15, 4, contentWidth - 4, 15);
+            graphics.DrawLine(pen, contentWidth - 4, 4, contentWidth - 15, 15);
+        }
+        graphics.Restore(state);
+
+        if (AgentCounterWidth > 0)
+        {
+            var duration = AgentIndicatorRenderer.CycleDuration(AgentIconStyle);
+            var phase = AnimateAgentCounter ? (Environment.TickCount64 % duration) / (float)duration : 0.25f;
+            AgentIndicatorRenderer.Draw(graphics, AgentCounterBounds, _workingAgentCount, AgentIconStyle, phase,
+                AgentCounterSize, AgentCounterMode, AgentCounterSide, SynchronizeAgentAnimations);
         }
     }
 
@@ -400,7 +531,7 @@ internal sealed class TaskbarWidgetForm : Form
         var percentageOnRight = ShowPercentages && PercentageSide == PercentagePosition.Right;
         var labelWidth = LabelMode == LabelContentMode.TimeToReset ? CountdownLabelWidth : StaticLabelWidth;
         var contentLeft = 3;
-        var contentRight = Width - 7;
+        var contentRight = ClientSize.Width - AgentCounterWidth - 7;
         Rectangle? externalPercentageBounds = null;
 
         if (percentageOnLeft)
@@ -520,6 +651,8 @@ internal sealed class TaskbarWidgetForm : Form
         {
             _countdownTimer.Stop();
             _countdownTimer.Dispose();
+            _animationTimer.Stop();
+            _animationTimer.Dispose();
             _tooltip.Dispose();
         }
 
@@ -1161,7 +1294,6 @@ internal sealed class TaskbarWidgetForm : Form
         public int Right;
         public int Bottom;
     }
-
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct NativePoint(int x, int y)
     {
@@ -1254,6 +1386,63 @@ internal static class WidgetSettings
     {
         get => ReadBoolean("ShowPercentages", defaultValue: true);
         set => WriteBoolean("ShowPercentages", value);
+    }
+
+    public static bool ShowAgentCounter
+    {
+        get => ReadBoolean("ShowAgentCounter", defaultValue: true);
+        set => WriteBoolean("ShowAgentCounter", value);
+    }
+
+    public static bool AnimateAgentCounter
+    {
+        get => ReadBoolean("AnimateAgentCounter", defaultValue: true);
+        set => WriteBoolean("AnimateAgentCounter", value);
+    }
+
+    public static LoadingIconStyle SelectedLoadingIconStyle
+    {
+        get => ReadEnum("LoadingIconStyle", LoadingIconStyle.Arc);
+        set => WriteEnum("LoadingIconStyle", value);
+    }
+
+    public static AgentIndicatorPosition SelectedAgentIndicatorPosition
+    {
+        get => ReadEnum("AgentIndicatorPosition", AgentIndicatorPosition.Right);
+        set => WriteEnum("AgentIndicatorPosition", value);
+    }
+
+    public static AgentIndicatorSize SelectedAgentIndicatorSize
+    {
+        get => ReadEnum("AgentIndicatorSize", AgentIndicatorSize.Normal);
+        set => WriteEnum("AgentIndicatorSize", value);
+    }
+
+    public static AgentIndicatorMode SelectedAgentIndicatorMode
+    {
+        get => ReadEnum("AgentIndicatorMode", AgentIndicatorMode.IconAndNumber);
+        set => WriteEnum("AgentIndicatorMode", value);
+    }
+
+    public static bool SynchronizeAgentAnimations
+    {
+        get => ReadBoolean("SynchronizeAgentAnimations", defaultValue: false);
+        set => WriteBoolean("SynchronizeAgentAnimations", value);
+    }
+
+    internal static T ParseEnum<T>(object? value, T fallback) where T : struct, Enum =>
+        value is string name && Enum.TryParse<T>(name, out var parsed) && Enum.IsDefined(parsed) ? parsed : fallback;
+
+    private static T ReadEnum<T>(string name, T fallback) where T : struct, Enum
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
+        return ParseEnum(key?.GetValue(name), fallback);
+    }
+
+    private static void WriteEnum<T>(string name, T value) where T : struct, Enum
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+        key.SetValue(name, value.ToString(), RegistryValueKind.String);
     }
 
     public static LabelContentMode SelectedLabelMode
