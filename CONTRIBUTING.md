@@ -25,6 +25,13 @@ possible. Verify all styles, label and percentage positions, Windows scaling
 above 100%, and left/right/custom placement. Regenerate the style gallery with
 the screenshot-export command documented in the README when rendering changes.
 
+For working-agent changes, verify idle hiding, task completion and interruption,
+all icon styles and sizes, both display modes, left/right expansion, and
+synchronized/staggered timing. Check fullscreen video on one display while the
+other display's taskbar remains visible. Keep the
+[working-agent guide](docs/working-agents.md), README menu labels/defaults, and
+generated previews consistent with the implementation.
+
 ## Pull requests
 
 Describe the motivation, implementation, and manual verification. Include a
