@@ -71,7 +71,7 @@ internal sealed class AgentActivityMonitor
             {
                 using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 state.Read(stream, cancellationToken);
-                if (state.IsWorking)
+                if (state.IsWorking && state.IsMainTask)
                 {
                     count++;
                 }
@@ -112,6 +112,7 @@ internal sealed class AgentActivityMonitor
         private long _offset;
         private string? _turnId;
         public bool IsWorking { get; private set; }
+        public bool IsMainTask { get; private set; }
 
         public void Read(Stream stream, CancellationToken cancellationToken)
         {
@@ -120,6 +121,7 @@ internal sealed class AgentActivityMonitor
                 _offset = 0;
                 _turnId = null;
                 IsWorking = false;
+                IsMainTask = false;
             }
 
             stream.Position = _offset;
@@ -151,7 +153,8 @@ internal sealed class AgentActivityMonitor
 
         internal void Apply(string line)
         {
-            if (!line.Contains("\"task_started\"", StringComparison.Ordinal) &&
+            if (!line.Contains("\"session_meta\"", StringComparison.Ordinal) &&
+                !line.Contains("\"task_started\"", StringComparison.Ordinal) &&
                 !line.Contains("\"task_complete\"", StringComparison.Ordinal) &&
                 !line.Contains("\"turn_aborted\"", StringComparison.Ordinal))
             {
@@ -163,9 +166,27 @@ internal sealed class AgentActivityMonitor
                 using var document = JsonDocument.Parse(line);
                 var root = document.RootElement;
                 if (root.ValueKind != JsonValueKind.Object ||
-                    !root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String || type.GetString() != "event_msg" ||
-                    !root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object ||
-                    !payload.TryGetProperty("type", out var eventType) || eventType.ValueKind != JsonValueKind.String)
+                    !root.TryGetProperty("type", out var type) || type.ValueKind != JsonValueKind.String ||
+                    !root.TryGetProperty("payload", out var payload) || payload.ValueKind != JsonValueKind.Object)
+                {
+                    return;
+                }
+
+                if (type.GetString() == "session_meta")
+                {
+                    var hasParent = payload.TryGetProperty("parent_thread_id", out var parent) &&
+                        parent.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(parent.GetString());
+                    var isSubagent = payload.TryGetProperty("source", out var source) &&
+                        ((source.ValueKind == JsonValueKind.Object && source.TryGetProperty("subagent", out _)) ||
+                        (source.ValueKind == JsonValueKind.String && string.Equals(source.GetString(), "subagent", StringComparison.OrdinalIgnoreCase)));
+                    // User-created forks use forked_from_id and remain main tasks.
+                    // Parent links and subagent sources identify workers/guardians.
+                    IsMainTask = !hasParent && !isSubagent;
+                    return;
+                }
+
+                if (type.GetString() != "event_msg" || !payload.TryGetProperty("type", out var eventType) ||
+                    eventType.ValueKind != JsonValueKind.String)
                 {
                     return;
                 }

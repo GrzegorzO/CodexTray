@@ -65,7 +65,7 @@ internal static class ScreenshotExporter
         using var captionFont = new Font("Segoe UI", 9);
         using var text = new SolidBrush(Color.White);
         graphics.DrawString("Working agents · sizes and display modes", titleFont, text, 18, 12);
-        graphics.DrawString("Three agents · icons grow outward from the battery controls", captionFont, text, 18, 40);
+        graphics.DrawString("Three main tasks · icons grow outward from the battery controls", captionFont, text, 18, 40);
         AgentIndicatorSize[] sizes = [AgentIndicatorSize.Small, AgentIndicatorSize.Normal, AgentIndicatorSize.Large];
         for (var row = 0; row < 3; row++)
             for (var column = 0; column < sizes.Length; column++)

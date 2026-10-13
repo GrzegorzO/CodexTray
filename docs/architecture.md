@@ -15,10 +15,14 @@ areas:
 writer locks once per second. Codex runtime status is scoped to the app-server
 owning each thread, so the short-lived quota server cannot supply desktop-wide
 activity. The monitor caches rollout paths and committed byte offsets, ignores
-incomplete JSONL writes, and counts a thread only when its writer lock is held
-and its latest turn has started without completing or aborting. Released locks
-clear cached activity after process exit. Only lifecycle fields are interpreted;
-conversation content is neither retained nor logged. This local file format is
+incomplete JSONL writes, and classifies sessions using their `session_meta` records.
+Subagent sources and nonempty `parent_thread_id` links are excluded, including
+background guardian sessions. A `forked_from_id` alone does not exclude a main
+chat fork. A main task counts only while its writer lock is held and its latest
+turn has started without completing or aborting. Sessions without metadata are
+not counted. Released locks clear cached activity after process exit. Only
+session classification and lifecycle fields are interpreted; conversation
+content is neither retained nor logged. This local file format is
 an implementation dependency and does not cover remote-only or ephemeral work.
 
 `AgentIndicatorRenderer` draws eleven native loading styles, including a robot

@@ -16,12 +16,14 @@ All notable changes are documented here. This project follows
   with right-side placement by default
 - Local activity diagnostics via `--print-activity` and a loading-style gallery
 - Small (70%), Normal (100%), and Large (130%) agent-indicator sizes
-- One-icon-per-agent mode with spaced icons growing outward on either side
+- One-icon-per-task mode with spaced icons growing outward on either side
 - Saved synchronization toggle for repeated icons, with staggered timing retained
   by default
 
 ### Fixed
 
+- Count running main tasks only, excluding subagents and background guardian
+  sessions while preserving separate user-created main-chat forks
 - Repaint animation as a complete buffered frame and keep visibility polling
   passive to avoid flickering when video is fullscreen on another monitor
 - Detect fullscreen coverage per monitor without hit-testing the widget's own

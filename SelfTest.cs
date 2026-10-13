@@ -15,6 +15,7 @@ internal static class SelfTest
             VerifyStartupRecovery();
             VerifyTaskbarVisibility();
             VerifyAgentActivity();
+            VerifyMainTaskCounting();
             VerifyAgentIndicator();
             using var document = JsonDocument.Parse("""
                 {
@@ -126,6 +127,17 @@ internal static class SelfTest
     {
         var state = new AgentActivityMonitor.ActivityState();
         Assert(!state.IsWorking, "unknown activity is idle");
+        Assert(!state.IsMainTask, "sessions without metadata are not classified as main tasks");
+        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","parent_thread_id":null}}""");
+        Assert(state.IsMainTask, "desktop session is a main task");
+        state.Apply("""{"type":"session_meta","payload":{"source":{"subagent":{"other":"guardian"}}}}""");
+        Assert(!state.IsMainTask, "guardian source is excluded without requiring a parent link");
+        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","parent_thread_id":"parent"}}""");
+        Assert(!state.IsMainTask, "parent-linked sessions are excluded regardless of source");
+        state.Apply("""{"type":"session_meta","payload":{"source":"subagent"}}""");
+        Assert(!state.IsMainTask, "legacy string subagent source is excluded");
+        state.Apply("""{"type":"session_meta","payload":{"source":"cli","forked_from_id":"original"}}""");
+        Assert(state.IsMainTask, "user-created fork is still a main task");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}""");
         Assert(state.IsWorking, "started turn is working");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous"}}""");
@@ -161,7 +173,8 @@ internal static class SelfTest
         var rollout = Path.Combine(sessions.FullName, $"rollout-2026-10-13T00-00-00-{id}.jsonl");
         try
         {
-            File.WriteAllText(rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"live"}}""" + "\n");
+            File.WriteAllText(rollout, """{"type":"session_meta","payload":{"source":"cli"}}""" + "\n" +
+                """{"type":"event_msg","payload":{"type":"task_started","turn_id":"live"}}""" + "\n");
             using var writer = new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
             writer.Lock(0, 1);
             var monitor = new AgentActivityMonitor(home);
@@ -187,6 +200,68 @@ internal static class SelfTest
         {
             stream.Position = stream.Length;
             stream.Write(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+    }
+
+    private static void VerifyMainTaskCounting()
+    {
+        var home = Path.Combine(Path.GetTempPath(), $"CodexTray-main-tasks-test-{Guid.NewGuid():N}");
+        var locks = Directory.CreateDirectory(Path.Combine(home, "thread-writer-locks"));
+        var sessions = Directory.CreateDirectory(Path.Combine(home, "sessions"));
+        var fixtures = new List<(string Lock, string Rollout, FileStream Writer)>();
+        try
+        {
+            var main = AddTask("vscode");
+            AddTask(new { subagent = new { other = "guardian" } }, parent: main.Id);
+            AddTask(new { subagent = new { thread_spawn = new { parent_thread_id = main.Id, depth = 1 } } });
+            AddTask("vscode", parent: main.Id);
+            var second = AddTask("cli", acquireLock: false);
+            var fork = AddTask("vscode", forkedFrom: main.Id, acquireLock: false);
+            var monitor = new AgentActivityMonitor(home);
+            Assert(monitor.ReadCount(CancellationToken.None) == 1, "one main task with guardian and workers counts once");
+            second.Writer.Lock(0, 1);
+            Assert(monitor.ReadCount(CancellationToken.None) == 2, "two independent main tasks count twice");
+            fork.Writer.Lock(0, 1);
+            Assert(monitor.ReadCount(CancellationToken.None) == 3, "manually forked main task counts separately");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"active"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 2, "main completion clears its count even while helpers remain active");
+            second.Writer.Unlock(0, 1);
+            fork.Writer.Unlock(0, 1);
+            Assert(monitor.ReadCount(CancellationToken.None) == 0, "only running subagents cannot leave a visible main-task count");
+        }
+        finally
+        {
+            foreach (var fixture in fixtures)
+            {
+                fixture.Writer.Dispose();
+                File.Delete(fixture.Lock);
+                File.Delete(fixture.Rollout);
+            }
+            Directory.Delete(locks.FullName);
+            Directory.Delete(sessions.FullName);
+            Directory.Delete(home);
+        }
+
+        (string Id, string Rollout, FileStream Writer) AddTask(object source, string? parent = null,
+            string? forkedFrom = null, bool acquireLock = true)
+        {
+            var id = Guid.NewGuid().ToString();
+            var lockPath = Path.Combine(locks.FullName, id + ".lock");
+            var rollout = Path.Combine(sessions.FullName, $"rollout-2026-10-13T00-00-00-{id}.jsonl");
+            var metadata = JsonSerializer.Serialize(new
+            {
+                type = "session_meta",
+                payload = new { id, source, parent_thread_id = parent, forked_from_id = forkedFrom }
+            });
+            File.WriteAllText(rollout, metadata + "\n" +
+                """{"type":"event_msg","payload":{"type":"task_started","turn_id":"active"}}""" + "\n");
+            var writer = new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+            fixtures.Add((lockPath, rollout, writer));
+            if (acquireLock)
+            {
+                writer.Lock(0, 1);
+            }
+            return (id, rollout, writer);
         }
     }
 

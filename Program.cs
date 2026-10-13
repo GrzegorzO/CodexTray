@@ -21,7 +21,7 @@ internal static class Program
     {
         if (args.Contains("--print-activity", StringComparer.OrdinalIgnoreCase))
         {
-            Console.WriteLine($"Working local agents: {new AgentActivityMonitor().ReadCount(CancellationToken.None)}");
+            Console.WriteLine($"Running main tasks: {new AgentActivityMonitor().ReadCount(CancellationToken.None)}");
             return 0;
         }
 

@@ -26,12 +26,12 @@ use unreleased features; check the changelog when using a release archive.
 - Optional percentages and left- or right-side labels
 - Percentages centered in, or placed to the left or right of, the batteries
 - Left, right, or per-monitor custom taskbar placement
-- Live local-agent activity with eleven loading-icon styles, including an
+- Live main-task activity with eleven loading-icon styles, including an
   animated robot head; hidden entirely when idle
 - Counter at the far left or right (default), centered vertically, with optional
   animation and synchronization
 - Small (70%), Normal (100%), and Large (130%) agent indicators
-- Icon and number, or one spaced icon per working agent, expanding outward
+- Icon and number, or one spaced icon per running main task, expanding outward
 - One widget on every connected display
 - Settings and per-monitor positions remembered in the current user profile
 - Optional start with Windows
@@ -86,7 +86,7 @@ Right-click either the taskbar widget or notification-area icon:
 
 | Menu | Options |
 | --- | --- |
-| **Show details** | Show percentages, reset times, and the local-agent count |
+| **Show details** | Show percentages, reset times, and the running main-task count |
 | **Refresh** | Request a usage update immediately |
 | **Show this widget in taskbar** | Show or hide widgets on every monitor |
 | **Display → Style** | Eleven classic, modern, accessible, and decorative styles |
@@ -100,7 +100,7 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Loading icon style** | Eleven activity-icon styles, including Robot head; Rotating arc by default |
 | **Display → Working agents → Counter position** | Right of all controls (default) or left of all controls |
 | **Display → Working agents → Indicator size** | Small (70%), Normal (100%, default), or Large (130%) |
-| **Display → Working agents → Display mode** | Icon and number (default), or one icon per working agent |
+| **Display → Working agents → Display mode** | Icon and number (default), or one icon per running main task |
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
 | **Start with Windows** | Toggle per-user automatic startup |
@@ -123,14 +123,15 @@ Codex is idle. Open **Display → Working agents** to change its appearance.
 
 ![Working-agent loading icon choices](docs/images/working-agents-gallery.png)
 
-The activity indicator shows an icon and the number of in-progress local Codex
-threads, including subagents. A turn waiting on a tool, approval, or user input
-still counts until completion or interruption. The indicator is vertically
-centered beside the full battery,
-label, and percentage group. At zero, both the icon and count disappear and the
-widget releases that space. Turning off animation keeps the selected icon static.
+The activity indicator shows an icon and the number of in-progress main Codex
+tasks. Subagents and background helpers are excluded, so one main task with
+several workers still shows `1`. A main turn waiting on a tool, approval, or user
+input still counts until completion or interruption. The indicator is vertically
+centered beside the full battery, label, and percentage group. At zero, both the
+icon and count disappear and the widget releases that space. Turning off animation
+keeps the selected icon static.
 Size scales the indicator's icons, count, and spacing; the usage batteries keep
-their existing size. In **One icon per agent** mode, two agents show two icons
+their existing size. In **One icon per task** mode, two main tasks show two icons
 with no number. Additional icons extend rightward on the right side and leftward
 on the left side. The battery group stays anchored while space is available;
 at a taskbar boundary the widget moves enough to fit.
@@ -153,7 +154,8 @@ This reads account quota state; it does not send a model prompt or consume Codex
 tokens. The process is closed immediately after the response.
 
 Agent activity is read separately from local Codex session lifecycle events and
-thread writer locks under `CODEX_HOME` (or `%USERPROFILE%\.codex`). An in-progress turn
+thread writer locks under `CODEX_HOME` (or `%USERPROFILE%\.codex`). Session metadata
+excludes subagent sources and parent-linked workers. An in-progress main turn
 counts once; completion or interruption removes it. A released writer lock also
 removes it, so a crashed Codex process cannot leave a phantom count. Loaded idle
 threads do not count. This requires Codex's local writer-lock/session format;
@@ -195,8 +197,8 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - No analytics, telemetry, advertisements, or update service
 - No direct reading of `auth.json`, API keys, passwords, or browser data
 - Agent activity reads local Codex session logs, which can contain conversation
-  content, to inspect turn lifecycle events. CodexTray does not upload, save, or
-  log that content, and does not change session-file contents.
+  content, to inspect session metadata and turn lifecycle events. CodexTray does
+  not upload, save, or log that content, and does not change session-file contents.
 - No model prompts or generation requests
 - Network/authentication behavior is delegated to the installed Codex app server
 - Display preferences remain in the current user's Windows registry hive

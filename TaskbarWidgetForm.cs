@@ -227,7 +227,7 @@ internal sealed class TaskbarWidgetForm : Form
         var text = _isError ? $"Codex usage error: {_errorMessage}" : _snapshot?.ToTooltip() ?? "Codex usage is still loading.";
         if (AgentCounterWidth > 0)
         {
-            text += $"\n{_workingAgentCount} working {(_workingAgentCount == 1 ? "agent" : "agents")}";
+            text += $"\n{_workingAgentCount} running main {(_workingAgentCount == 1 ? "task" : "tasks")}";
         }
 
         _tooltip.SetToolTip(this, text);

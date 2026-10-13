@@ -328,7 +328,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
         {
             var item = new ToolStripMenuItem(mode == AgentIndicatorMode.IconAndNumber
-                ? "Icon and number (default)" : "One icon per agent")
+                ? "Icon and number (default)" : "One icon per task")
             {
                 Checked = WidgetSettings.SelectedAgentIndicatorMode == mode
             };
@@ -530,7 +530,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             : _snapshot?.ToDisplayText() ?? "Codex usage is still loading.";
 
         text += _activityError is null
-            ? $"{Environment.NewLine}{Environment.NewLine}Working local agents: {_workingAgentCount}"
+            ? $"{Environment.NewLine}{Environment.NewLine}Running main tasks: {_workingAgentCount}"
             : $"{Environment.NewLine}{Environment.NewLine}Agent activity unavailable: {_activityError}";
 
         _notifyIcon.BalloonTipTitle = "Codex usage";
