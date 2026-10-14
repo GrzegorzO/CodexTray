@@ -4,6 +4,8 @@ CodexTray can show how many local main Codex tasks have an in-progress turn.
 Subagents and background helpers are excluded. The indicator sits beside the
 usage batteries and disappears completely when the count reaches zero,
 including the space it occupied.
+Copied parent history in a subagent log does not create an additional main-task
+icon. Separate user-created chat forks still count as independent tasks.
 
 This guide describes the current `main` branch. Check
 [Unreleased in the changelog](../CHANGELOG.md#unreleased) before expecting these

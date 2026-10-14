@@ -16,6 +16,8 @@ writer locks once per second. Codex runtime status is scoped to the app-server
 owning each thread, so the short-lived quota server cannot supply desktop-wide
 activity. The monitor caches rollout paths and committed byte offsets, ignores
 incomplete JSONL writes, and classifies sessions using their `session_meta` records.
+Only metadata whose session ID matches the writer-lock owner is applied;
+ancestor metadata copied into forked logs cannot change the task's identity.
 Subagent sources and nonempty `parent_thread_id` links are excluded, including
 background guardian sessions. A `forked_from_id` alone does not exclude a main
 chat fork. A main task counts only while its writer lock is held and its latest
@@ -104,6 +106,10 @@ Windows 11 has no supported API for inserting an arbitrary custom control into
 its XAML taskbar. Each widget is therefore a borderless, non-activating Win32
 window owned by the matching Explorer taskbar and kept in the documented topmost
 z-order band. Monitor-specific offsets are stored in the current user's registry.
+Labels, percentages, and activity counts use pixel font sizes matching the drawn
+geometry, so a high-DPI graphics surface cannot enlarge text independently of
+the batteries and icons. Preview rendering accepts an explicit surface DPI for
+regression checks from 96 through 288 DPI.
 
 This design intentionally avoids DLL injection and Explorer patching. Out-of-context
 foreground and window-location accessibility event hooks restore z-order after

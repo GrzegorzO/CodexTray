@@ -16,6 +16,7 @@ internal static class SelfTest
             VerifyTaskbarVisibility();
             VerifyAgentActivity();
             VerifyMainTaskCounting();
+            VerifyWidgetTextDpi();
             VerifyProjectColors();
             VerifyDesktopProjectIcons();
             VerifyAgentIndicator();
@@ -125,23 +126,59 @@ internal static class SelfTest
             TaskbarVisibility.BlocksTaskbar(window, monitor, true, false, false, false, false);
     }
 
+    private static void VerifyWidgetTextDpi()
+    {
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        var now = DateTimeOffset.Now;
+        widget.SetSnapshot(new UsageSnapshot(new UsageWindow(6, 300, now.AddHours(4).AddMinutes(30)),
+            new UsageWindow(11, 10080, now.AddDays(5).AddHours(12)), null));
+        widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right);
+        widget.SetWorkingAgentCount(12);
+        foreach (var style in Enum.GetValues<DisplayStyle>())
+            foreach (var labelSide in Enum.GetValues<LabelPosition>())
+                foreach (var percentageSide in Enum.GetValues<PercentagePosition>())
+                    foreach (var labelMode in Enum.GetValues<LabelContentMode>())
+                    {
+                        widget.ApplyDisplaySettings(style, true, true, labelMode, labelSide, percentageSide);
+                        using var expected = widget.RenderPreview(Color.Black, scale: 1, dpi: 96);
+                        foreach (var dpi in new[] { 120, 144, 192, 288 })
+                        {
+                            using var actual = widget.RenderPreview(Color.Black, scale: 1, dpi: dpi);
+                            for (var x = 0; x < expected.Width; x++)
+                                for (var y = 0; y < expected.Height; y++)
+                                {
+                                    Assert(expected.GetPixel(x, y) == actual.GetPixel(x, y),
+                                        $"{style} labels, percentages and agent count keep their size at {dpi} DPI");
+                                }
+                        }
+                    }
+    }
+
     private static void VerifyAgentActivity()
     {
-        var state = new AgentActivityMonitor.ActivityState();
+        var state = new AgentActivityMonitor.ActivityState("main");
         Assert(!state.IsWorking, "unknown activity is idle");
         Assert(!state.IsMainTask, "sessions without metadata are not classified as main tasks");
-        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","parent_thread_id":null}}""");
+        state.Apply("""{"type":"session_meta","payload":{"source":"vscode"}}""");
+        Assert(!state.IsMainTask, "metadata without an owner cannot classify a session");
+        state.Apply("""{"type":"session_meta","payload":{"id":"ancestor","source":"vscode"}}""");
+        Assert(!state.IsMainTask, "ancestor metadata alone cannot classify a session");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":"vscode","parent_thread_id":null}}""");
         Assert(state.IsMainTask, "desktop session is a main task");
-        state.Apply("""{"type":"session_meta","payload":{"source":{"subagent":{"other":"guardian"}}}}""");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":{"subagent":{"other":"guardian"}}}}""");
         Assert(!state.IsMainTask, "guardian source is excluded without requiring a parent link");
-        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","parent_thread_id":"parent"}}""");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":"vscode","parent_thread_id":"parent"}}""");
         Assert(!state.IsMainTask, "parent-linked sessions are excluded regardless of source");
-        state.Apply("""{"type":"session_meta","payload":{"source":"subagent"}}""");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":"subagent"}}""");
         Assert(!state.IsMainTask, "legacy string subagent source is excluded");
-        state.Apply("""{"type":"session_meta","payload":{"source":"cli","forked_from_id":"original"}}""");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":"cli","forked_from_id":"original"}}""");
         Assert(state.IsMainTask, "user-created fork is still a main task");
-        state.Apply("""{"type":"session_meta","payload":{"source":"vscode","cwd":"C:\\Projects\\Main"}}""");
+        state.Apply("""{"type":"session_meta","payload":{"id":"main","source":"vscode","cwd":"C:\\Projects\\Main"}}""");
         Assert(state.WorkingDirectory == @"C:\Projects\Main", "session working directory is read for project matching");
+        state.Apply("""{"type":"session_meta","payload":{"id":"ancestor","source":"subagent","cwd":"C:\\Other"}}""");
+        Assert(state.IsMainTask && state.WorkingDirectory == @"C:\Projects\Main",
+            "ancestor metadata cannot replace the owner's classification or project directory");
         state.Apply("""{"type":"turn_context","payload":{"cwd":"C:\\Worktrees\\Main"}}""");
         Assert(state.WorkingDirectory == @"C:\Worktrees\Main" && state.IsMainTask, "turn working directory updates without changing task classification");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}""");
@@ -157,7 +194,7 @@ internal static class SelfTest
         Assert(!state.IsWorking, "interrupted turn is idle");
 
         using var stream = new MemoryStream();
-        var incremental = new AgentActivityMonitor.ActivityState();
+        var incremental = new AgentActivityMonitor.ActivityState("main");
         Append("""{"type":"event_msg","payload":{"type":"task_started","turn_id":"żółć"}}""" + "\n");
         incremental.Read(stream, CancellationToken.None);
         Assert(incremental.IsWorking, "UTF-8 lifecycle event");
@@ -179,7 +216,7 @@ internal static class SelfTest
         var rollout = Path.Combine(sessions.FullName, $"rollout-2026-10-13T00-00-00-{id}.jsonl");
         try
         {
-            File.WriteAllText(rollout, """{"type":"session_meta","payload":{"source":"cli"}}""" + "\n" +
+            File.WriteAllText(rollout, """{"type":"session_meta","payload":{"id":"11111111-2222-3333-4444-555555555555","source":"cli"}}""" + "\n" +
                 """{"type":"event_msg","payload":{"type":"task_started","turn_id":"live"}}""" + "\n");
             using var writer = new FileStream(lockPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
             writer.Lock(0, 1);
@@ -220,7 +257,9 @@ internal static class SelfTest
         {
             var main = AddTask("vscode", idOverride: "ffffffff-ffff-ffff-ffff-ffffffffffff");
             AddTask(new { subagent = new { other = "guardian" } }, parent: main.Id);
-            AddTask(new { subagent = new { thread_spawn = new { parent_thread_id = main.Id, depth = 1 } } });
+            var worker = AddTask(new { subagent = new { thread_spawn = new { parent_thread_id = main.Id, depth = 1 } } });
+            // Forked worker logs include the parent's history after their own metadata.
+            File.AppendAllText(worker.Rollout, File.ReadAllText(main.Rollout));
             AddTask("vscode", parent: main.Id);
             var second = AddTask("cli", acquireLock: false, idOverride: "00000000-0000-0000-0000-000000000001");
             var fork = AddTask("vscode", forkedFrom: main.Id, acquireLock: false);
@@ -230,6 +269,9 @@ internal static class SelfTest
             var colored = monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single();
             Assert(colored.ThreadId == main.Id && colored.ProjectColor == ProjectColorMap.ParseColor("green"), "color belongs to the main task, not its helpers");
             Assert(colored.ProjectMarker == new ProjectMarker("plane"), "project marker belongs to the same main task");
+            File.AppendAllText(worker.Rollout, File.ReadAllText(main.Rollout));
+            Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ThreadId == main.Id,
+                "incrementally copied parent metadata cannot promote a worker to a duplicate main task");
             Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectColor is null, "project metadata is optional when colors are off");
             Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectMarker is null, "project markers are not read when both options are off");
             WriteAppearance("red");

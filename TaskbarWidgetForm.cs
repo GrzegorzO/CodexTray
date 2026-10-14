@@ -530,11 +530,12 @@ internal sealed class TaskbarWidgetForm : Form
         DrawWidget(eventArgs.Graphics);
     }
 
-    internal Bitmap RenderPreview(Color background, float scale = 2f)
+    internal Bitmap RenderPreview(Color background, float scale = 2f, float dpi = 96f)
     {
         var bitmap = new Bitmap(
             (int)Math.Ceiling(Width * scale),
             (int)Math.Ceiling(Height * scale));
+        bitmap.SetResolution(dpi, dpi);
         using var graphics = Graphics.FromImage(bitmap);
         graphics.Clear(background);
         graphics.ScaleTransform(scale, scale);
@@ -621,7 +622,9 @@ internal sealed class TaskbarWidgetForm : Form
             var label = LabelMode == LabelContentMode.TimeToReset
                 ? FormatResetLabel(window, DateTimeOffset.Now)
                 : staticLabel;
-            using var font = new Font("Segoe UI", 8.5f, FontStyle.Bold, GraphicsUnit.Point);
+            // Match the pixel-based row geometry; point fonts grow again with
+            // the graphics DPI and overflow on high-scaling displays.
+            using var font = new Font("Segoe UI", 8.5f * 96f / 72f, FontStyle.Bold, GraphicsUnit.Pixel);
             using var labelBrush = new SolidBrush(Style switch
             {
                 DisplayStyle.Futuristic => Color.FromArgb(125, 225, 255),
@@ -1118,7 +1121,7 @@ internal sealed class TaskbarWidgetForm : Form
     private static void DrawPercentageText(Graphics graphics, Rectangle bounds, int? remainingPercent, Color color)
     {
         var text = remainingPercent is null ? "--" : $"{remainingPercent}%";
-        using var font = new Font("Segoe UI", 7.5f, FontStyle.Bold, GraphicsUnit.Point);
+        using var font = new Font("Segoe UI", 10f, FontStyle.Bold, GraphicsUnit.Pixel);
         var shadowColor = color.GetBrightness() < 0.45f
             ? Color.FromArgb(190, 255, 255, 255)
             : Color.FromArgb(190, 0, 0, 0);

@@ -73,7 +73,7 @@ internal sealed class AgentActivityMonitor
 
             if (!_states.TryGetValue(id, out var state))
             {
-                state = new ActivityState();
+                state = new ActivityState(id);
                 _states[id] = state;
             }
 
@@ -126,7 +126,7 @@ internal sealed class AgentActivityMonitor
         }
     }
 
-    internal sealed class ActivityState
+    internal sealed class ActivityState(string threadId)
     {
         private long _offset;
         private string? _turnId;
@@ -196,6 +196,13 @@ internal sealed class AgentActivityMonitor
 
                 if (type.GetString() == "session_meta")
                 {
+                    // Forks copy ancestor metadata after the session's own record.
+                    // Only the writer-lock owner's metadata can classify this task.
+                    if (!payload.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String ||
+                        !string.Equals(id.GetString(), threadId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
                     WorkingDirectory = payload.TryGetProperty("cwd", out var cwd) && cwd.ValueKind == JsonValueKind.String ? cwd.GetString() : null;
                     var hasParent = payload.TryGetProperty("parent_thread_id", out var parent) &&
                         parent.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(parent.GetString());

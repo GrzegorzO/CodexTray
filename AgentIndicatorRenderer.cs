@@ -95,7 +95,7 @@ internal static class AgentIndicatorRenderer
         else
         {
             DrawIcon(graphics, new RectangleF(6, -8, 16, 16), style, phase);
-            using var font = new Font("Segoe UI", 10, FontStyle.Bold, GraphicsUnit.Point);
+            using var font = new Font("Segoe UI", 10f * 96f / 72f, FontStyle.Bold, GraphicsUnit.Pixel);
             using var brush = new SolidBrush(Color.White);
             using var format = new StringFormat { Alignment = StringAlignment.Near, LineAlignment = StringAlignment.Center };
             graphics.DrawString(count.ToString(System.Globalization.CultureInfo.InvariantCulture), font, brush,
