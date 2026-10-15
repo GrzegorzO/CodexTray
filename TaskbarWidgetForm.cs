@@ -1451,7 +1451,7 @@ internal static class WidgetSettings
 
     public static LoadingIconStyle SelectedLoadingIconStyle
     {
-        get => ReadEnum("LoadingIconStyle", LoadingIconStyle.Arc);
+        get => ReadEnum("LoadingIconStyle", LoadingIconStyle.Robot);
         set => WriteEnum("LoadingIconStyle", value);
     }
 
@@ -1463,7 +1463,7 @@ internal static class WidgetSettings
 
     public static AgentIndicatorMode SelectedAgentIndicatorMode
     {
-        get => ReadEnum("AgentIndicatorMode", AgentIndicatorMode.IconAndNumber);
+        get => ReadEnum("AgentIndicatorMode", AgentIndicatorMode.RepeatedIcons);
         set => WriteEnum("AgentIndicatorMode", value);
     }
 
@@ -1475,13 +1475,13 @@ internal static class WidgetSettings
 
     public static bool UseProjectColors
     {
-        get => ReadBoolean("UseProjectColors", defaultValue: false);
+        get => ReadBoolean("UseProjectColors", defaultValue: true);
         set => WriteBoolean("UseProjectColors", value);
     }
 
     public static bool ShowProjectIcons
     {
-        get => ReadBoolean("ShowProjectIcons", defaultValue: false);
+        get => ReadBoolean("ShowProjectIcons", defaultValue: true);
         set => WriteBoolean("ShowProjectIcons", value);
     }
 

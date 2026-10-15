@@ -10,8 +10,8 @@ All notable changes are documented here. This project follows
 - Fresh configurations now use the current personal preset: Neon batteries,
   countdown labels, and custom placement 8 pixels from the taskbar's left edge.
   Existing saved preferences continue to override these defaults. Working-agent
-  defaults remain animated rotating arc with a count, staggered timing, and
-  project colors and badges off.
+  defaults use animated Robot heads, one per task, staggered timing, and
+  project colors and badges enabled.
 
 ### Added
 

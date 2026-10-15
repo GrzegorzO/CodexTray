@@ -99,13 +99,13 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Show percentages** | Show or hide percentage values |
 | **Display → Percentage position** | Left, centered, or right with collision-free label spacing |
 | **Display → Working agents → Show counter when working** | Enable or disable the activity indicator (enabled by default) |
-| **Display → Working agents → Loading icon style** | Eleven activity-icon styles, including Robot head; Rotating arc by default |
+| **Display → Working agents → Loading icon style** | Eleven activity-icon styles; Robot head by default |
 | **Display → Working agents → Counter position** | Right of all controls (default) or left of all controls |
-| **Display → Working agents → Display mode** | Icon and number (default), or one icon per running main task |
+| **Display → Working agents → Display mode** | One icon per running main task (default), or icon and number |
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
-| **Display → Working agents → Use project colors** | Off by default; available in One icon per task mode to color each icon by its task's project |
-| **Display → Working agents → Show project icon** | Off by default; add a small project-colored badge at the upper-right of each task icon, independently of loading-icon coloring |
+| **Display → Working agents → Use project colors** | On by default; available in One icon per task mode to color each icon by its task's project |
+| **Display → Working agents → Show project icon** | On by default; add a small project-colored badge at the upper-right of each task icon, independently of loading-icon coloring |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
@@ -114,8 +114,8 @@ All display settings and per-monitor offsets are read again when the app starts.
 
 Fresh configurations default to Neon batteries, countdown labels on the left,
 centered percentages, and custom placement 8 pixels from the taskbar's left
-edge. Working agents use an animated rotating arc and count, with staggered
-timing and project colors and badges off. Saved preferences take precedence.
+edge. Working agents use animated Robot heads, one per task, with staggered
+timing and project colors and badges enabled. Saved preferences take precedence.
 
 The battery styles use familiar visual conventions: **Fluent** follows
 [Windows' 4-pixel rounded bar geometry](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/geometry),

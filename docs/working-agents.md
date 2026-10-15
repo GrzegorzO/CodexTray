@@ -31,13 +31,13 @@ immediately to widgets on all monitors and are saved under
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | Show counter when working | On | Show activity when the count is nonzero. Turning it off hides the activity indicator. |
-| Loading icon style | Rotating arc | Choose from eleven styles, listed below. |
+| Loading icon style | Robot head | Choose from eleven styles, listed below. |
 | Counter position | Right of all controls | Place the indicator outside the full battery, label, and percentage group. Left is also available. |
-| Display mode | Icon and number | Show one icon plus the count, or choose **One icon per task** to replace the number with repeated icons. |
+| Display mode | One icon per task | Show one icon per working task, or choose **Icon and number** for a single icon and count. |
 | Animate loading icon | On | Animate the selected style. Turn off for a static frame. |
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
-| Use project colors | Off | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
-| Show project icon | Off | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
+| Use project colors | On | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
+| Show project icon | On | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
 
 Working-agent icons, numbers, and spacing always use the former Large size (130%
 of the original). There is no size setting; earlier Small/Normal preferences are
