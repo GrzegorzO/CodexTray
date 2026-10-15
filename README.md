@@ -112,6 +112,11 @@ Dragging a widget horizontally switches that display to custom placement.
 Display and placement settings are stored under `HKCU\Software\CodexTray`.
 All display settings and per-monitor offsets are read again when the app starts.
 
+Fresh configurations default to Neon batteries, countdown labels on the left,
+centered percentages, and custom placement 8 pixels from the taskbar's left
+edge. Working agents use an animated rotating arc and count, with staggered
+timing and project colors and badges off. Saved preferences take precedence.
+
 The battery styles use familiar visual conventions: **Fluent** follows
 [Windows' 4-pixel rounded bar geometry](https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/geometry),
 **Minimal** uses a quiet determinate progress track, and **High contrast** combines

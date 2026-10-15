@@ -50,7 +50,7 @@ internal sealed class TaskbarWidgetForm : Form
 {
     // Windows does not expose a supported slot for third-party taskbar widgets,
     // so this compact window is positioned over a user-selected taskbar area.
-    private const int DefaultOffset = 320;
+    private const int DefaultOffset = 8;
     private const int EdgeGap = 8;
     private const int DefaultWidth = 94;
     private const int ExternalPercentageWidth = 38;
@@ -1360,7 +1360,7 @@ internal static class WidgetSettings
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
-            return key?.GetValue("WidgetOffsetX") is int value ? value : null;
+            return key?.GetValue("WidgetOffsetX") is int value ? value : 8;
         }
         set
         {
@@ -1422,7 +1422,7 @@ internal static class WidgetSettings
             return (DisplayStyle)legacyValue;
         }
 
-        return DisplayStyle.Classic;
+        return DisplayStyle.Neon;
     }
 
     public static bool ShowLabels
@@ -1505,9 +1505,9 @@ internal static class WidgetSettings
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
-            return key?.GetValue("LabelContentMode") is int value && value == (int)LabelContentMode.TimeToReset
-                ? LabelContentMode.TimeToReset
-                : LabelContentMode.Static;
+            return key?.GetValue("LabelContentMode") is int value && Enum.IsDefined((LabelContentMode)value)
+                ? (LabelContentMode)value
+                : LabelContentMode.TimeToReset;
         }
         set
         {

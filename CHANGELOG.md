@@ -5,6 +5,14 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Fresh configurations now use the current personal preset: Neon batteries,
+  countdown labels, and custom placement 8 pixels from the taskbar's left edge.
+  Existing saved preferences continue to override these defaults. Working-agent
+  defaults remain animated rotating arc with a count, staggered timing, and
+  project colors and badges off.
+
 ### Added
 
 - Independently switchable project icon badges at the upper-right of repeated
