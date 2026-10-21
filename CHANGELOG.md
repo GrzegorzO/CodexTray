@@ -42,6 +42,8 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Paint the complete widget immediately when working-agent icons appear or
+  disappear, preventing a brief dark background in the resized area
 - Prevent copied parent-session metadata in subagent logs from producing
   duplicate main-task icons with the same project color
 - Keep labels, percentages, and agent counts proportional to the batteries on

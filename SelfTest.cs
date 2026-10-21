@@ -22,6 +22,7 @@ internal static class SelfTest
             VerifyProjectColors();
             VerifyDesktopProjectIcons();
             VerifyAgentIndicator();
+            VerifyAgentPresentationPaint();
             VerifyWorkingTaskNavigation();
             using var document = JsonDocument.Parse("""
                 {
@@ -855,6 +856,32 @@ internal static class SelfTest
         var disabledWidth = widget.ClientSize.Width;
         widget.SetWorkingAgentCount(4);
         Assert(widget.AgentCounterWidth == 0 && widget.ClientSize.Width == disabledWidth, "disabled counter stays hidden during activity");
+    }
+
+    private static void VerifyAgentPresentationPaint()
+    {
+        using var menu = new ContextMenuStrip();
+        var screen = Screen.PrimaryScreen ?? Screen.AllScreens.First();
+        using var widget = new TaskbarWidgetForm(menu, screen, loadSettings: false);
+        // Exercise a real layered window without putting a test widget on the taskbar.
+        widget.Location = new Point(screen.Bounds.Left, screen.Bounds.Top - widget.Height - 100);
+        widget.Show();
+        Rectangle? painted = null;
+        widget.Paint += (_, eventArgs) => painted = eventArgs.ClipRectangle;
+
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+            foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
+                foreach (var animate in new[] { false, true })
+                {
+                    widget.ApplyAgentSettings(true, animate, LoadingIconStyle.Robot, side, mode);
+                    foreach (var count in new[] { 1, 2, 3, 2, 0 })
+                    {
+                        painted = null;
+                        widget.SetWorkingAgentCount(count);
+                        Assert(painted == widget.ClientRectangle,
+                            $"{side} {mode} animation={animate} count={count} paints a complete frame before returning");
+                    }
+                }
     }
 
     private static void VerifyWorkingTaskNavigation()

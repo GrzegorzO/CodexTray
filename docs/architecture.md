@@ -47,8 +47,10 @@ head with blinking eyes, a glowing antenna, and a gentle bob over a slower
 3.6-second cycle. Widgets reserve a separate strip at the selected outer edge
 and collapse it completely at zero. The animation timer invalidates the complete
 buffered window while visible and active; the reduced-motion setting draws a
-static frame. Counter visibility, style, motion, and side use the same per-user
-registry settings as the existing display options.
+static frame. Activity layout changes synchronously paint a complete buffered
+frame after resizing so newly exposed space is transparent immediately, even
+with animation disabled. Counter visibility, style, motion, and side use the
+same per-user registry settings as the existing display options.
 The native indicator drawing uses a fixed 1.3 scale, including the count
 and spacing. The old size registry preference is ignored and the size submenu
 has been removed. Repeated-icon mode reserves one slot per working agent and reverses

@@ -226,6 +226,13 @@ internal sealed class TaskbarWidgetForm : Form
         UpdateTooltip();
         UpdateAnimation();
         Invalidate();
+        if (Visible)
+        {
+            // Resizing a color-key layered window exposes an unpainted strip.
+            // Present the full buffered frame now, before the message loop or
+            // animation timer can leave that strip visible as a dark rectangle.
+            Update();
+        }
     }
 
     private void UpdateWidth(int? previousLeftInset = null)
