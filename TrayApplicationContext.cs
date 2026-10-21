@@ -36,6 +36,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _visibilityTimer;
     private readonly System.Windows.Forms.Timer _activityTimer;
     private readonly AgentActivityMonitor _activityMonitor = new();
+    private readonly AgentCompletionSound _completionSound = new();
     private readonly ToolStripMenuItem _agentCounterItem;
     private readonly ToolStripMenuItem _animateAgentsItem;
     private readonly ToolStripMenuItem _synchronizeAgentsItem;
@@ -373,6 +374,96 @@ internal sealed class TrayApplicationContext : ApplicationContext
             agentPositionMenu.DropDownItems.Add(item);
         }
         agentMenu.DropDownItems.Add(agentPositionMenu);
+        agentMenu.DropDownItems.Add(new ToolStripSeparator());
+        var completionSoundMenu = new ToolStripMenuItem("Completion sound")
+        {
+            ToolTipText = "Play when a main task stops working. Selecting a sound previews it."
+        };
+        var soundItems = new Dictionary<string, ToolStripMenuItem>(StringComparer.Ordinal);
+        foreach (var sound in AgentCompletionSound.Choices)
+        {
+            var item = new ToolStripMenuItem(sound.Title)
+            {
+                Checked = WidgetSettings.SelectedAgentCompletionSound == sound.Id
+            };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.SelectedAgentCompletionSound = sound.Id;
+                foreach (var pair in soundItems)
+                {
+                    pair.Value.Checked = pair.Key == sound.Id;
+                }
+                _completionSound.Play(sound.Id);
+            };
+            soundItems.Add(sound.Id, item);
+            completionSoundMenu.DropDownItems.Add(item);
+        }
+        completionSoundMenu.DropDownItems.Add(new ToolStripSeparator());
+        var customSoundItem = new ToolStripMenuItem("Custom WAV file")
+        {
+            Checked = WidgetSettings.SelectedAgentCompletionSound == AgentCompletionSound.CustomSoundId,
+            Enabled = File.Exists(AgentCompletionSound.CustomSoundPath),
+            ToolTipText = WidgetSettings.CustomAgentCompletionSoundName
+        };
+        soundItems.Add(AgentCompletionSound.CustomSoundId, customSoundItem);
+        customSoundItem.Click += (_, _) =>
+        {
+            WidgetSettings.SelectedAgentCompletionSound = AgentCompletionSound.CustomSoundId;
+            foreach (var pair in soundItems)
+            {
+                pair.Value.Checked = pair.Key == AgentCompletionSound.CustomSoundId;
+            }
+            _completionSound.Play(AgentCompletionSound.CustomSoundId);
+        };
+        completionSoundMenu.DropDownItems.Add(customSoundItem);
+        completionSoundMenu.DropDownItems.Add("Choose custom WAV file...", null, (_, _) =>
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Choose a completion sound (PCM WAV)",
+                Filter = "WAV audio (*.wav)|*.wav",
+                CheckFileExists = true,
+                Multiselect = false,
+                RestoreDirectory = true
+            };
+            if (dialog.ShowDialog() != DialogResult.OK)
+            {
+                return;
+            }
+            try
+            {
+                AgentCompletionSound.ImportCustomSound(dialog.FileName);
+                WidgetSettings.CustomAgentCompletionSoundName = Path.GetFileName(dialog.FileName);
+                customSoundItem.ToolTipText = WidgetSettings.CustomAgentCompletionSoundName;
+                customSoundItem.Enabled = true;
+                customSoundItem.PerformClick();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                MessageBox.Show(exception.Message, "Could not use custom sound", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        });
+        agentMenu.DropDownItems.Add(completionSoundMenu);
+        var minimumLifetimeMenu = new ToolStripMenuItem("Minimum runtime for sound");
+        var lifetimeItems = new Dictionary<AgentSoundMinimumLifetime, ToolStripMenuItem>();
+        foreach (var minimum in Enum.GetValues<AgentSoundMinimumLifetime>())
+        {
+            var item = new ToolStripMenuItem(AgentCompletionSound.LifetimeTitle(minimum))
+            {
+                Checked = WidgetSettings.MinimumAgentSoundLifetime == minimum
+            };
+            item.Click += (_, _) =>
+            {
+                WidgetSettings.MinimumAgentSoundLifetime = minimum;
+                foreach (var pair in lifetimeItems)
+                {
+                    pair.Value.Checked = pair.Key == minimum;
+                }
+            };
+            lifetimeItems.Add(minimum, item);
+            minimumLifetimeMenu.DropDownItems.Add(item);
+        }
+        agentMenu.DropDownItems.Add(minimumLifetimeMenu);
         displayMenu.DropDownItems.Add(agentMenu);
         displayMenu.DropDownItems.Add(new ToolStripSeparator());
         displayMenu.DropDownItems.Add(new ToolStripMenuItem($"Refresh interval: {RefreshIntervalMinutes} minutes")
@@ -451,6 +542,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             foreach (var widget in _widgets)
             {
                 widget.SetWorkingTasks(tasks);
+            }
+            if (_activityMonitor.StoppedLifetimes.Any(lifetime =>
+                AgentCompletionSound.Qualifies(lifetime, WidgetSettings.MinimumAgentSoundLifetime)))
+            {
+                // Coalesce simultaneous stops into one cue across all monitors.
+                _completionSound.Play(WidgetSettings.SelectedAgentCompletionSound);
             }
         }
         catch (OperationCanceledException) when (_shutdown.IsCancellationRequested)
@@ -776,6 +873,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Dispose();
         _currentIcon?.Dispose();
         _activityTimer.Dispose();
+        _completionSound.Dispose();
         foreach (var image in _agentMenuImages)
         {
             image.Dispose();

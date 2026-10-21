@@ -28,6 +28,7 @@ use unreleased features; check the changelog when using a release archive.
 - Left, right, or per-monitor custom taskbar placement
 - Live main-task activity with eleven loading-icon styles, including an
   animated robot head; hidden entirely when idle
+- Optional sounds when main tasks stop, with nine bundled choices and a minimum runtime
 - Counter at the far left or right (default), centered vertically, with optional
   animation and synchronization
 - Working-agent icons use a fixed, large size for readability
@@ -107,6 +108,8 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
 | **Display → Working agents → Use project colors** | On by default; available in One icon per task mode to color each icon by its task's project |
 | **Display → Working agents → Show project icon** | On by default; add a small project-colored badge at the upper-right of each task icon, independently of loading-icon coloring |
+| **Display → Working agents → Completion sound** | None (default), nine bundled sounds, or your own PCM WAV via **Choose custom WAV file...**; selecting a sound previews it |
+| **Display → Working agents → Minimum runtime for sound** | 0, 10, 30 (default), or 60 seconds, or 5 minutes |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
@@ -162,6 +165,20 @@ colors** on or off: the badge always uses the project color (usual blue when no
 custom color is available). Badges stay still while the loading icons animate.
 Named badges use the installed Codex Desktop app's vector shapes with transparent
 backgrounds; built-in drawings cover unavailable or unsupported desktop assets.
+
+Choose **Completion sound** to hear when a main task completes, is interrupted,
+or exits after running for at least **Minimum runtime for sound**. Runtime means
+the current turn, including tool and approval waits. Sound defaults to **None**,
+and the minimum runtime defaults to **30 seconds**. Sounds work with the counter
+or widget hidden. Stops detected in the same activity poll share one cue, and
+historical completions are silent when CodexTray starts. Both preferences are saved.
+
+Use **Completion sound → Choose custom WAV file...** to select your own
+uncompressed PCM WAV. CodexTray validates and copies it into
+`%LOCALAPPDATA%\CodexTray\sounds\custom-completion.wav`, selects it, and plays a
+preview. The copy and selection survive restarts even if you move or delete the
+original file. Switch back to it with **Custom WAV file**, or choose another file
+to replace it. Canceling or selecting invalid audio keeps the previous selection.
 
 ![Agent indicator display modes and positions](docs/images/agent-layout-gallery.png)
 
@@ -265,6 +282,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and the
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Bundled completion sounds have separate CC BY 3.0, CC0, and MIT terms. See
+[audio attribution](assets/sounds/ATTRIBUTION.txt) and the notices in
+[assets/sounds/licenses](assets/sounds/licenses), also included in published builds.
 
 CodexTray is an independent community project and is not affiliated with or
 endorsed by OpenAI or Microsoft. Codex is a trademark of OpenAI.

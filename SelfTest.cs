@@ -15,6 +15,8 @@ internal static class SelfTest
             VerifyStartupRecovery();
             VerifyTaskbarVisibility();
             VerifyAgentActivity();
+            VerifyAgentCompletionSounds();
+            VerifyCustomCompletionSound();
             VerifyMainTaskCounting();
             VerifyWidgetTextDpi();
             VerifyProjectColors();
@@ -223,12 +225,19 @@ internal static class SelfTest
             writer.Lock(0, 1);
             var monitor = new AgentActivityMonitor(home);
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "live writer with active turn counts once");
+            Assert(monitor.StoppedLifetimes.Count == 0, "initial activity scan never notifies");
             File.AppendAllText(rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"live"}}""" + "\n");
             Assert(monitor.ReadCount(CancellationToken.None) == 0, "loaded idle thread does not count");
+            Assert(monitor.StoppedLifetimes.Count == 1, "main-task completion produces one sound candidate");
+            monitor.ReadCount(CancellationToken.None);
+            Assert(monitor.StoppedLifetimes.Count == 0, "completion is not repeated on later polls");
             File.AppendAllText(rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"crash"}}""" + "\n");
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "next active turn counts");
             writer.Unlock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 0, "released writer cannot leave a phantom active task");
+            Assert(monitor.StoppedLifetimes.Count == 1, "released writer stops its previously active main task");
+            monitor.ReadCount(CancellationToken.None);
+            Assert(monitor.StoppedLifetimes.Count == 0, "released writer does not notify twice");
         }
         finally
         {
@@ -244,6 +253,154 @@ internal static class SelfTest
         {
             stream.Position = stream.Length;
             stream.Write(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+    }
+
+    private static void VerifyAgentCompletionSounds()
+    {
+        Assert(AgentCompletionSound.ParseSoundId(null) == "None", "completion sound defaults to None");
+        Assert(AgentCompletionSound.ParseSoundId("missing.wav") == "None", "unknown sound falls back to None");
+        Assert(WidgetSettings.ParseEnum<AgentSoundMinimumLifetime>(null, AgentSoundMinimumLifetime.ThirtySeconds) ==
+            AgentSoundMinimumLifetime.ThirtySeconds, "minimum sound runtime defaults to 30 seconds");
+        Assert(WidgetSettings.ParseEnum("invalid", AgentSoundMinimumLifetime.ThirtySeconds) ==
+            AgentSoundMinimumLifetime.ThirtySeconds, "invalid minimum runtime falls back to 30 seconds");
+        int[] expectedLifetimes = [0, 10, 30, 60, 300];
+        Assert(Enum.GetValues<AgentSoundMinimumLifetime>().Select(value => (int)value).SequenceEqual(expectedLifetimes),
+            "all five requested minimum lifetimes are available");
+        foreach (var minimum in Enum.GetValues<AgentSoundMinimumLifetime>())
+        {
+            var boundary = TimeSpan.FromSeconds((int)minimum);
+            Assert(!AgentCompletionSound.Qualifies(boundary - TimeSpan.FromTicks(1), minimum), "runtime below threshold is silent");
+            Assert(AgentCompletionSound.Qualifies(boundary, minimum), "runtime equal to threshold qualifies");
+            Assert(AgentCompletionSound.Qualifies(boundary + TimeSpan.FromSeconds(1), minimum), "runtime above threshold qualifies");
+        }
+        Assert(AgentCompletionSound.Choices.Count == 10 && AgentCompletionSound.OpenSound("None") is null,
+            "nine bundled sounds plus a silent None choice");
+        foreach (var sound in AgentCompletionSound.Choices.Skip(1))
+        {
+            using var audio = AgentCompletionSound.OpenSound(sound.Id);
+            Assert(audio is not null, $"{sound.Title} is embedded for single-file publishing");
+            using var player = new System.Media.SoundPlayer(audio!);
+            player.Load();
+            Assert(player.IsLoadCompleted, $"{sound.Title} loads without playing during self-test");
+        }
+
+        using var stream = new MemoryStream();
+        var state = new AgentActivityMonitor.ActivityState("main");
+        Append("""{"type":"session_meta","payload":{"id":"main","source":"cli"}}""");
+        Event("task_started", "historical", 0);
+        Event("task_complete", "historical", 60);
+        Event("task_started", "active-at-startup", 100);
+        state.Read(stream, CancellationToken.None);
+        Assert(state.IsWorking && state.StoppedLifetimes.Count == 0, "historical completions are silent while an existing active turn is retained");
+        Event("task_started", "active-at-startup", 110);
+        Event("task_complete", "older-turn", 120);
+        Event("task_complete", "active-at-startup", 130);
+        Event("task_complete", "active-at-startup", 131);
+        // Both events can arrive between polls, even while this thread stays active.
+        Event("task_started", "quick", 140);
+        Event("turn_aborted", "quick", 150);
+        Event("task_started", "next", 160);
+        state.Read(stream, CancellationToken.None);
+        Assert(state.IsWorking && state.StoppedLifetimes.SequenceEqual(new[] { TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(10) }),
+            "turn timestamps survive startup, duplicate starts, stale/duplicate completions, rapid restarts and interruption");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.StoppedLifetimes.Count == 0, "incremental reads drain sound candidates once");
+        stream.SetLength(0);
+        Append("""{"type":"session_meta","payload":{"id":"main","source":"cli"}}""");
+        Event("task_started", "rewritten", 0);
+        Event("task_complete", "rewritten", 60);
+        state.Read(stream, CancellationToken.None);
+        Assert(state.StoppedLifetimes.Count == 0, "truncated session history is not replayed as new completions");
+        Append("""{"type":"session_meta","payload":{"id":"main","source":"subagent"}}""");
+        Event("task_started", "worker", 200);
+        Event("task_complete", "worker", 300);
+        state.Read(stream, CancellationToken.None);
+        Assert(state.StoppedLifetimes.Count == 0, "subagent stops do not produce sound candidates");
+
+        void Append(string line)
+        {
+            stream.Position = stream.Length;
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(line + "\n"));
+        }
+
+        void Event(string type, string turnId, int seconds) => Append(JsonSerializer.Serialize(new
+        {
+            timestamp = DateTimeOffset.UnixEpoch.AddSeconds(seconds),
+            type = "event_msg",
+            payload = new { type, turn_id = turnId }
+        }));
+    }
+
+    private static void VerifyCustomCompletionSound()
+    {
+        Assert(AgentCompletionSound.ParseSoundId(AgentCompletionSound.CustomSoundId) == AgentCompletionSound.CustomSoundId,
+            "custom sound selection is preserved by settings parsing");
+        Assert(AgentCompletionSound.ParseSoundId(@"C:\arbitrary.wav") == "None", "sound IDs cannot become arbitrary file paths");
+        var directory = Path.Combine(Path.GetTempPath(), $"CodexTray-custom-sound-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var source = Path.Combine(directory, "user sound.wav");
+        var destination = Path.Combine(directory, "custom-completion.wav");
+        var invalid = Path.Combine(directory, "invalid.wav");
+        try
+        {
+            using (var bundled = AgentCompletionSound.OpenSound("06_confirmation_short")!)
+            using (var output = File.Create(source))
+            {
+                bundled.CopyTo(output);
+            }
+            var expected = File.ReadAllBytes(source);
+            AgentCompletionSound.ImportCustomSound(source, destination);
+            File.Delete(source);
+            Assert(File.ReadAllBytes(destination).SequenceEqual(expected), "custom sound survives deletion of the original user file");
+            using (var player = new System.Media.SoundPlayer(destination))
+            {
+                player.Load();
+                Assert(player.IsLoadCompleted, "imported custom WAV loads without playing during self-test");
+            }
+            File.WriteAllText(invalid, "This is not WAV audio.");
+            RejectInvalidSound();
+            File.WriteAllBytes(invalid, expected[..^1]);
+            RejectInvalidSound();
+            var compressed = (byte[])expected.Clone();
+            // The bundled fixture has a standard 16-byte fmt chunk at offset 12.
+            compressed[20] = 3; // IEEE float rather than PCM
+            File.WriteAllBytes(invalid, compressed);
+            RejectInvalidSound();
+            Assert(File.ReadAllBytes(destination).SequenceEqual(expected), "invalid selections preserve the last valid custom sound");
+            Assert(!Directory.EnumerateFiles(directory, "*.tmp").Any(), "failed custom imports clean their staging files");
+
+            using (var bundled = AgentCompletionSound.OpenSound("04_task_complete_chime")!)
+            using (var output = File.Create(source))
+            {
+                bundled.CopyTo(output);
+            }
+            using (var previous = AgentCompletionSound.OpenCustomSound(destination))
+            {
+                AgentCompletionSound.ImportCustomSound(source, destination);
+                Assert(File.ReadAllBytes(destination).SequenceEqual(File.ReadAllBytes(source)), "custom sound can be replaced while its previous stream is open");
+                Assert(previous.Length == expected.Length, "replacement does not invalidate an existing playback stream");
+            }
+        }
+        finally
+        {
+            File.Delete(source);
+            File.Delete(destination);
+            File.Delete(invalid);
+            Directory.Delete(directory);
+        }
+
+        void RejectInvalidSound()
+        {
+            try
+            {
+                AgentCompletionSound.ImportCustomSound(invalid, destination);
+                throw new InvalidOperationException("Self-test failed: invalid custom WAV was accepted");
+            }
+            catch (InvalidDataException)
+            {
+                // Invalid selections must not replace a working custom sound.
+            }
         }
     }
 

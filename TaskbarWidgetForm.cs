@@ -1502,6 +1502,40 @@ internal static class WidgetSettings
         set => WriteBoolean("ShowAgentCounter", value);
     }
 
+    public static string SelectedAgentCompletionSound
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
+            return AgentCompletionSound.ParseSoundId(key?.GetValue("AgentCompletionSound"));
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+            key.SetValue("AgentCompletionSound", AgentCompletionSound.ParseSoundId(value), RegistryValueKind.String);
+        }
+    }
+
+    public static AgentSoundMinimumLifetime MinimumAgentSoundLifetime
+    {
+        get => ReadEnum("AgentSoundMinimumLifetime", AgentSoundMinimumLifetime.ThirtySeconds);
+        set => WriteEnum("AgentSoundMinimumLifetime", value);
+    }
+
+    public static string CustomAgentCompletionSoundName
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
+            return key?.GetValue("CustomAgentCompletionSoundName") as string ?? string.Empty;
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+            key.SetValue("CustomAgentCompletionSoundName", value, RegistryValueKind.String);
+        }
+    }
+
     public static bool AnimateAgentCounter
     {
         get => ReadBoolean("AnimateAgentCounter", defaultValue: true);

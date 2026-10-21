@@ -1,0 +1,29 @@
+THIRD-PARTY AUDIO — CodexTray completion sounds (2026-10-21)
+
+01: ConstructionComplete.ogg from SciFi RTS Status Vocals by Beast
+https://opengameart.org/content/scifi-rts-status-vocals
+CC BY 3.0: https://creativecommons.org/licenses/by/3.0/
+Changes: decoded to PCM16 WAV, no effects or trimming. Retain this credit and license link.
+Creator describes Festival slt_arctic_cg synthesis processed with SoX.
+
+04–05: Completion sound. by Brandon Morris (submitted by HaelDB)
+https://opengameart.org/content/completion-sound
+Selected completetask_0.mp3 and gmae.wav under the CC0 option.
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+
+06–07: Interface Sounds by Kenney (confirmation_001.ogg, confirmation_002.ogg)
+https://kenney.nl/assets/interface-sounds
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
+Original pack license preserved in licenses/Kenney-interface-sounds-License.txt.
+
+12–15: CoquiTTS Voice Pack for Games v2 by Coqui.ai
+https://github.com/coqui-ai/coqui-voice-pack
+https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2
+MIT License, Copyright (c) 2023 Coqui.ai.
+The complete copyright and permission notice is in licenses/Coqui-MIT.txt.
+Include that notice with redistributed clips.
+
+All WAVs decoded/re-encoded to PCM16 preserving original sample rate and channels.
+No trimming, voice cloning, normalization, or sound effects were applied.
+Source snapshots are provenance evidence, not extra content licensed as audio assets.
+No creator endorsement is implied. Your application code can retain its own license.

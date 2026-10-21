@@ -15,6 +15,11 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Custom completion sounds via a PCM WAV file picker, with validation, previews,
+  and a saved local copy that continues working after moving the original file
+- Optional completion sounds for main tasks, with nine bundled choices, immediate
+  previews, and saved minimum-runtime choices of 0, 10, 30, or 60 seconds or
+  5 minutes. Defaults are no sound and a 30-second minimum.
 - Click a working-agent icon in One icon per task mode to open its session in
   Codex Desktop, while preserving drag placement and battery double-click details
 - Independently switchable project icon badges at the upper-right of repeated

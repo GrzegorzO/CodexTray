@@ -27,6 +27,21 @@ session classification and lifecycle fields are interpreted; conversation
 content is neither retained nor logged. This local file format is
 an implementation dependency and does not cover remote-only or ephemeral work.
 
+The monitor also reports stopped main-turn lifetimes from lifecycle timestamps,
+including interruption and released writer locks. Initial reads and truncated
+history establish a silent baseline. Incremental reads preserve completions
+even when the next turn starts between polls. `AgentCompletionSound` plays an
+embedded PCM WAV asynchronously when any stop meets the saved minimum runtime;
+simultaneous stops share one cue, independent of widgets and display settings.
+Sound IDs are validated against the bundled catalog. Audio is embedded for
+single-file publishing, with attribution and license notices copied alongside
+the executable. Defaults are None and 30 seconds.
+Custom PCM WAV selections are validated and staged before atomically replacing
+the managed copy in `%LOCALAPPDATA%\CodexTray\sounds`. The registry stores the
+Custom selection and original filename. Playback uses the managed copy rather
+than relying on the source file remaining available; invalid imports preserve
+the existing copy and preferences.
+
 `AgentIndicatorRenderer` draws eleven native loading styles, including a robot
 head with blinking eyes, a glowing antenna, and a gentle bob over a slower
 3.6-second cycle. Widgets reserve a separate strip at the selected outer edge

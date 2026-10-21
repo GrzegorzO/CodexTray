@@ -11,7 +11,10 @@ internal sealed class AgentActivityMonitor
     private readonly Dictionary<string, string> _rollouts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ActivityState> _states = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _workingOrder = [];
+    private readonly List<TimeSpan> _stoppedLifetimes = [];
     private long _nextDiscovery;
+
+    internal IReadOnlyList<TimeSpan> StoppedLifetimes => _stoppedLifetimes;
 
     public AgentActivityMonitor(string? home = null)
     {
@@ -24,6 +27,7 @@ internal sealed class AgentActivityMonitor
 
     internal IReadOnlyList<WorkingTask> ReadTasks(CancellationToken cancellationToken, bool includeProjectColors = false)
     {
+        _stoppedLifetimes.Clear();
         var lockDirectory = Path.Combine(_home, "thread-writer-locks");
         if (!Directory.Exists(lockDirectory))
         {
@@ -53,17 +57,12 @@ internal sealed class AgentActivityMonitor
             }
         }
 
-        foreach (var id in _states.Keys.Where(id => !liveThreads.Contains(id)).ToArray())
-        {
-            _states.Remove(id);
-        }
-
         if (includeProjectColors)
         {
             _projectColors.Refresh();
         }
         var tasks = new List<WorkingTask>();
-        foreach (var id in liveThreads.Order(StringComparer.Ordinal))
+        foreach (var id in liveThreads.Union(_states.Keys, StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!_rollouts.TryGetValue(id, out var path))
@@ -81,6 +80,13 @@ internal sealed class AgentActivityMonitor
             {
                 using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                 state.Read(stream, cancellationToken);
+                if (!liveThreads.Contains(id))
+                {
+                    // Read final events before treating a released lock as an exit.
+                    state.Stop(DateTimeOffset.UtcNow);
+                    _states.Remove(id);
+                }
+                _stoppedLifetimes.AddRange(state.StoppedLifetimes);
                 if (state.IsWorking && state.IsMainTask)
                 {
                     tasks.Add(new WorkingTask(id, state.WorkingDirectory,
@@ -130,16 +136,22 @@ internal sealed class AgentActivityMonitor
     {
         private long _offset;
         private string? _turnId;
+        private DateTimeOffset? _startedAt;
+        private bool _hasRead;
+        internal List<TimeSpan> StoppedLifetimes { get; } = [];
         public bool IsWorking { get; private set; }
         public bool IsMainTask { get; private set; }
         public string? WorkingDirectory { get; private set; }
 
         public void Read(Stream stream, CancellationToken cancellationToken)
         {
+            StoppedLifetimes.Clear();
             if (stream.Length < _offset)
             {
                 _offset = 0;
                 _turnId = null;
+                _startedAt = null;
+                _hasRead = false;
                 IsWorking = false;
                 IsMainTask = false;
                 WorkingDirectory = null;
@@ -170,6 +182,22 @@ internal sealed class AgentActivityMonitor
                 }
                 line.Write(buffer.AsSpan(segmentStart, bytesRead - segmentStart));
             }
+            if (!_hasRead)
+            {
+                // Historical completions establish a baseline and never notify.
+                StoppedLifetimes.Clear();
+                _hasRead = true;
+            }
+        }
+
+        internal void Stop(DateTimeOffset stoppedAt)
+        {
+            if (IsWorking && IsMainTask && _startedAt is { } startedAt)
+            {
+                StoppedLifetimes.Add(stoppedAt >= startedAt ? stoppedAt - startedAt : TimeSpan.Zero);
+            }
+            IsWorking = false;
+            _startedAt = null;
         }
 
         internal void Apply(string line)
@@ -232,9 +260,15 @@ internal sealed class AgentActivityMonitor
 
                 var turnId = payload.TryGetProperty("turn_id", out var turn) && turn.ValueKind == JsonValueKind.String
                     ? turn.GetString() : null;
+                var timestamp = root.TryGetProperty("timestamp", out var time) && time.ValueKind == JsonValueKind.String &&
+                    time.TryGetDateTimeOffset(out var parsedTime) ? parsedTime : DateTimeOffset.UtcNow;
                 switch (eventType.GetString())
                 {
                     case "task_started":
+                        if (!IsWorking || turnId != _turnId)
+                        {
+                            _startedAt = timestamp;
+                        }
                         _turnId = turnId;
                         IsWorking = true;
                         break;
@@ -242,7 +276,7 @@ internal sealed class AgentActivityMonitor
                     case "turn_aborted":
                         if (turnId is null || _turnId is null || turnId == _turnId)
                         {
-                            IsWorking = false;
+                            Stop(timestamp);
                         }
                         break;
                 }

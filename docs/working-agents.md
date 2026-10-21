@@ -38,6 +38,8 @@ immediately to widgets on all monitors and are saved under
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
 | Use project colors | On | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
 | Show project icon | On | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
+| Completion sound | None | Choose nine bundled sounds or your own PCM WAV using **Choose custom WAV file...**. Selecting a sound previews it; None disables playback. |
+| Minimum runtime for sound | 30 seconds | Choose 0, 10, 30, or 60 seconds, or 5 minutes. A turn lasting at least this long qualifies. |
 
 Working-agent icons, numbers, and spacing always use the former Large size (130%
 of the original). There is no size setting; earlier Small/Normal preferences are
@@ -45,6 +47,30 @@ ignored. The batteries keep their existing size.
 
 The indicator remains vertically centered. Idle hiding is always
 applied; there is no visible zero-state icon or reserved gap.
+
+### Completion sounds
+
+The selected sound plays when a main task completes, is interrupted, or releases
+its writer lock after being observed working. The minimum runtime applies to
+each turn, measured from its recorded start, including time waiting on tools,
+approval, or user input. Each new turn starts its own runtime. Subagent stops
+are excluded. Several stops detected in the same poll produce a single cue
+across all monitors. Playback runs asynchronously.
+
+Sound works with **Show counter when working** off, with the widget hidden,
+and in either display mode. Historical completions found during initial discovery
+or after a session file is truncated are silent. An already active turn retains
+its recorded start time when CodexTray launches. Temporary session read failures
+do not trigger sounds. Sessions first discovered after they have stopped cannot
+notify. Preferences take effect immediately and persist across restarts.
+
+**Choose custom WAV file...** opens a file picker for an uncompressed PCM WAV.
+A valid file is copied to `%LOCALAPPDATA%\CodexTray\sounds\custom-completion.wav`
+and immediately selected and previewed. CodexTray uses this saved copy after
+restarts, so the original file can be moved or deleted. **Custom WAV file**
+reselects the saved copy after using a bundled sound; its tooltip shows the
+original filename. Choosing another custom file replaces the copy. Canceling
+the picker or selecting invalid audio leaves the previous selection intact.
 
 ### Display modes
 
