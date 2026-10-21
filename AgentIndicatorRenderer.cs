@@ -62,6 +62,22 @@ internal static class AgentIndicatorRenderer
         side == AgentIndicatorPosition.Right ? 8 + index * 26
             : WidthFor(count, AgentIndicatorMode.RepeatedIcons) / Scale - 24 - index * 26;
 
+    internal static int TaskIndexAt(Point point, Rectangle bounds, int count, AgentIndicatorPosition side)
+    {
+        if (!bounds.Contains(point)) { return -1; }
+        var local = new PointF((point.X - bounds.Left) / Scale,
+            (point.Y - bounds.Top - bounds.Height / 2f) / Scale);
+        for (var index = 0; index < count; index++)
+        {
+            // Include animated shapes and the project badge in each icon's slot.
+            if (new RectangleF(IconXFor(index, count, side) - 1, -16, 26, 32).Contains(local))
+            {
+                return index;
+            }
+        }
+        return -1;
+    }
+
     internal static int CycleDuration(LoadingIconStyle style) => style == LoadingIconStyle.Robot ? 3600 : 1200;
 
     internal static void Draw(Graphics graphics, Rectangle bounds, int count, LoadingIconStyle style, float phase,

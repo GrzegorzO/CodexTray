@@ -53,6 +53,13 @@ With two in-progress main tasks, **Icon and number** shows one icon followed by 
 number. Each icon represents one main task, rather than its progress or
 remaining work.
 
+In **One icon per task** mode, left-click a task icon or its project badge to
+bring Codex Desktop forward and select that session. This requires Codex Desktop
+with its registered `codex://` link handler. The session must be available in
+that desktop app. The aggregate **Icon and number** display has no session click
+action. Dragging an icon still moves the widget without opening a chat;
+double-clicking the usage batteries still shows usage details.
+
 Additional icons extend outward from the battery group: rightward when the
 indicator is on the right and leftward when it is on the left. Existing battery
 and task icons keep their positions when new tasks appear, subject to available

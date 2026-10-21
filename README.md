@@ -32,6 +32,7 @@ use unreleased features; check the changelog when using a release archive.
   animation and synchronization
 - Working-agent icons use a fixed, large size for readability
 - Icon and number, or one spaced icon per running main task, expanding outward
+- Click a repeated task icon to bring Codex Desktop forward to that session
 - Optional project colors for repeated task icons, matching Codex Desktop's palette
 - Switchable project icon badges at the upper-right of repeated loading icons
 - One widget on every connected display

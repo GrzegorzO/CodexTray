@@ -553,6 +553,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.ShowBalloonTip(5000);
     }
 
+    private void OpenWorkingTask(string threadId)
+    {
+        try
+        {
+            CodexSessionLauncher.Open(threadId);
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            _notifyIcon.BalloonTipTitle = "Could not open Codex";
+            _notifyIcon.BalloonTipText = "Install Codex Desktop with its codex:// link handler to open task chats. " + exception.Message;
+            _notifyIcon.BalloonTipIcon = ToolTipIcon.Error;
+            _notifyIcon.ShowBalloonTip(5000);
+        }
+    }
+
     private void SetDisplayStyle(DisplayStyle style)
     {
         WidgetSettings.SelectedStyle = style;
@@ -717,6 +732,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             var widget = new TaskbarWidgetForm(menu, screen);
             widget.DetailsRequested += ShowDetails;
+            widget.WorkingTaskRequested += OpenWorkingTask;
             widget.PlacementCustomized += (_, _) => UpdatePlacementChecks();
             widget.SetWorkingTasks(_workingTasks);
             widget.ApplyDisplaySettings(

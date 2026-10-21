@@ -20,6 +20,7 @@ internal static class SelfTest
             VerifyProjectColors();
             VerifyDesktopProjectIcons();
             VerifyAgentIndicator();
+            VerifyWorkingTaskNavigation();
             using var document = JsonDocument.Parse("""
                 {
                   "rateLimits": {},
@@ -697,6 +698,99 @@ internal static class SelfTest
         var disabledWidth = widget.ClientSize.Width;
         widget.SetWorkingAgentCount(4);
         Assert(widget.AgentCounterWidth == 0 && widget.ClientSize.Width == disabledWidth, "disabled counter stays hidden during activity");
+    }
+
+    private static void VerifyWorkingTaskNavigation()
+    {
+        const string first = "11111111-2222-3333-4444-555555555555";
+        const string second = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        var start = CodexSessionLauncher.CreateStartInfo(first);
+        Assert(start.FileName == $"codex://threads/{first}" && start.UseShellExecute,
+            "task navigation uses the desktop protocol handler with the session ID");
+        var escaped = new Uri(CodexSessionLauncher.CreateStartInfo("id/?prompt=unexpected#fragment").FileName);
+        Assert(escaped.Query.Length == 0 && escaped.Fragment.Length == 0,
+            "session IDs cannot inject deep-link parameters");
+
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        var opened = new List<string>();
+        var details = 0;
+        var placements = 0;
+        widget.WorkingTaskRequested += opened.Add;
+        widget.DetailsRequested += (_, _) => details++;
+        widget.PlacementCustomized += (_, _) => placements++;
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+        {
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons);
+            widget.SetWorkingTasks([new WorkingTask(first, null), new WorkingTask(second, null)]);
+            foreach (var index in new[] { 0, 1 })
+            {
+                var point = IconPoint(index);
+                var expected = index == 0 ? first : second;
+                Assert(widget.WorkingThreadAt(point) == expected, "icon hit testing preserves task order on either side");
+                var badge = new Point(point.X + (int)(13 * AgentIndicatorRenderer.Scale),
+                    point.Y - (int)(10 * AgentIndicatorRenderer.Scale));
+                Assert(widget.WorkingThreadAt(badge) == expected, "project badge clicks resolve to their task");
+                Mouse("OnMouseDown", point);
+                Mouse("OnMouseUp", point);
+                Assert(opened[^1] == expected, "a left click requests the matching session");
+            }
+
+            opened.Clear();
+            var firstPoint = IconPoint(0);
+            Mouse("OnMouseDown", firstPoint);
+            Mouse("OnMouseUp", IconPoint(1));
+            Assert(opened.Count == 0, "releasing over another icon does not open either session");
+            Mouse("OnMouseDown", firstPoint, MouseButtons.Right);
+            Mouse("OnMouseUp", firstPoint, MouseButtons.Right);
+            Assert(opened.Count == 0, "right clicks do not open a session");
+            Mouse("OnMouseDoubleClick", firstPoint);
+            Assert(details == 0, "double clicking a task icon does not show quota details");
+
+            Mouse("OnMouseDown", firstPoint);
+            widget.SetWorkingTasks([new WorkingTask(second, null), new WorkingTask(first, null)]);
+            Mouse("OnMouseUp", firstPoint);
+            Assert(opened.Count == 0, "a changing task association cannot open the wrong chat during a click");
+            Assert(widget.WorkingThreadAt(firstPoint) == second,
+                "same-count same-color task replacements refresh navigation identity");
+            Mouse("OnMouseDown", firstPoint);
+            Mouse("OnMouseUp", firstPoint);
+            Assert(opened.Count == 1 && opened[0] == second, "the replacement session is selected on the next click");
+
+            opened.Clear();
+            Mouse("OnMouseDown", firstPoint);
+            Mouse("OnMouseMove", new Point(firstPoint.X, firstPoint.Y + SystemInformation.DragSize.Height + 2));
+            // Cancel capture before release so tests do not save taskbar placement.
+            widget.Capture = false;
+            Mouse("OnMouseUp", firstPoint);
+            Assert(opened.Count == 0, "dragging and lost capture cancel session navigation");
+
+            var batteryPoint = new Point(side == AgentIndicatorPosition.Left ? widget.AgentCounterWidth + 10 : 10, 10);
+            Assert(widget.WorkingThreadAt(batteryPoint) is null, "batteries do not resolve to a session");
+            Mouse("OnMouseDoubleClick", batteryPoint);
+            Assert(details == 1, "battery double clicks still show details");
+            details = 0;
+
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.IconAndNumber);
+            Assert(widget.WorkingThreadAt(new Point(widget.AgentCounterBounds.Left + 15, 21)) is null,
+                "the aggregate icon and number do not select an arbitrary session");
+            widget.ApplyAgentSettings(false, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons);
+            Assert(widget.WorkingThreadAt(firstPoint) is null, "hidden indicators cannot be clicked");
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons);
+            widget.SetWorkingAgentCount(2);
+            Assert(widget.WorkingThreadAt(IconPoint(0)) is null, "count-only updates clear stale session IDs");
+            widget.SetWorkingTasks([]);
+            Assert(widget.WorkingThreadAt(firstPoint) is null, "idle indicators cannot be clicked");
+        }
+        Assert(placements == 0, "clicking task icons does not change taskbar placement");
+
+        Point IconPoint(int index) => new(
+            widget.AgentCounterBounds.Left + (int)((AgentIndicatorRenderer.IconXFor(index, 2, widget.AgentCounterSide) + 8) * AgentIndicatorRenderer.Scale),
+            widget.ClientSize.Height / 2);
+
+        void Mouse(string method, Point point, MouseButtons button = MouseButtons.Left) =>
+            typeof(Control).GetMethod(method, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(widget, [new MouseEventArgs(button, 1, point.X, point.Y, 0)]);
     }
 
     private static void VerifyAgentModes()

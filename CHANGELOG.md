@@ -15,6 +15,8 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Click a working-agent icon in One icon per task mode to open its session in
+  Codex Desktop, while preserving drag placement and battery double-click details
 - Independently switchable project icon badges at the upper-right of repeated
   loading icons, always using their project color
 - Optional project colors in One icon per task mode, with saved preferences,

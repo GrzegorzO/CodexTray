@@ -61,14 +61,17 @@ internal sealed class TaskbarWidgetForm : Form
     private readonly System.Windows.Forms.Timer _countdownTimer;
     private readonly System.Windows.Forms.Timer _animationTimer;
     private readonly Screen _targetScreen;
+    private bool _mousePressed;
     private bool _dragging;
-    private int _dragStartMouseX;
+    private Point _dragStartMouse;
     private int _dragStartWindowX;
+    private string? _pressedThreadId;
     private UsageSnapshot? _snapshot;
     private bool _isError;
     private string? _errorMessage;
     private (string FiveHour, string Weekly)? _lastCountdownLabels;
     private int _workingAgentCount;
+    private string[] _taskThreadIds = [];
     private Color?[] _taskColors = [];
     private ProjectMarker?[] _taskMarkers = [];
 
@@ -94,6 +97,7 @@ internal sealed class TaskbarWidgetForm : Form
     public PercentagePosition PercentageSide { get; private set; } = PercentagePosition.Center;
 
     public event EventHandler? DetailsRequested;
+    public event Action<string>? WorkingTaskRequested;
     public event EventHandler? PlacementCustomized;
 
     public string ScreenDeviceName => _targetScreen.DeviceName;
@@ -139,9 +143,18 @@ internal sealed class TaskbarWidgetForm : Form
         MouseDown += OnDragStart;
         MouseMove += OnDragMove;
         MouseUp += OnDragEnd;
+        MouseCaptureChanged += (_, _) =>
+        {
+            if (!Capture)
+            {
+                _mousePressed = false;
+                _dragging = false;
+                _pressedThreadId = null;
+            }
+        };
         MouseDoubleClick += (_, eventArgs) =>
         {
-            if (eventArgs.Button == MouseButtons.Left)
+            if (eventArgs.Button == MouseButtons.Left && WorkingThreadAt(eventArgs.Location) is null)
             {
                 DetailsRequested?.Invoke(this, EventArgs.Empty);
             }
@@ -161,13 +174,14 @@ internal sealed class TaskbarWidgetForm : Form
     internal void SetWorkingAgentCount(int count)
     {
         count = Math.Max(0, count);
-        if (_workingAgentCount == count && _taskColors.Length == 0)
+        if (_workingAgentCount == count && _taskColors.Length == 0 && _taskThreadIds.Length == 0)
         {
             return;
         }
 
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         _workingAgentCount = count;
+        _taskThreadIds = [];
         _taskColors = [];
         _taskMarkers = [];
         UpdateAgentPresentation(previousLeftInset);
@@ -175,6 +189,8 @@ internal sealed class TaskbarWidgetForm : Form
 
     internal void SetWorkingTasks(IReadOnlyList<WorkingTask> tasks)
     {
+        // Identity can change while count, colors, and markers stay the same.
+        _taskThreadIds = tasks.Select(task => task.ThreadId).ToArray();
         var colors = tasks.Select(task => task.ProjectColor).ToArray();
         var markers = tasks.Select(task => task.ProjectMarker).ToArray();
         if (_workingAgentCount == tasks.Count && _taskColors.SequenceEqual(colors) && _taskMarkers.SequenceEqual(markers))
@@ -250,6 +266,10 @@ internal sealed class TaskbarWidgetForm : Form
         if (AgentCounterWidth > 0)
         {
             text += $"\n{_workingAgentCount} running main {(_workingAgentCount == 1 ? "task" : "tasks")}";
+            if (AgentCounterMode == AgentIndicatorMode.RepeatedIcons)
+            {
+                text += "\nClick a task icon to open its chat in Codex.";
+            }
         }
 
         _tooltip.SetToolTip(this, text);
@@ -1144,14 +1164,31 @@ internal sealed class TaskbarWidgetForm : Form
             return;
         }
 
-        _dragging = true;
-        _dragStartMouseX = Cursor.Position.X;
+        _mousePressed = true;
+        _dragging = false;
+        _pressedThreadId = eventArgs.Clicks == 1 ? WorkingThreadAt(eventArgs.Location) : null;
+        _dragStartMouse = PointToScreen(eventArgs.Location);
         _dragStartWindowX = Left;
         Capture = true;
     }
 
     private void OnDragMove(object? sender, MouseEventArgs eventArgs)
     {
+        Cursor = WorkingThreadAt(eventArgs.Location) is null ? Cursors.Default : Cursors.Hand;
+        if (!_mousePressed)
+        {
+            return;
+        }
+
+        var mouse = PointToScreen(eventArgs.Location);
+        var dragSize = SystemInformation.DragSize;
+        var dragBounds = new Rectangle(_dragStartMouse.X - dragSize.Width / 2,
+            _dragStartMouse.Y - dragSize.Height / 2, dragSize.Width, dragSize.Height);
+        if (!_dragging && !dragBounds.Contains(mouse))
+        {
+            _dragging = true;
+            _pressedThreadId = null;
+        }
         if (!_dragging)
         {
             return;
@@ -1162,26 +1199,48 @@ internal sealed class TaskbarWidgetForm : Form
             return;
         }
 
-        var desiredX = _dragStartWindowX + Cursor.Position.X - _dragStartMouseX;
+        var desiredX = _dragStartWindowX + mouse.X - _dragStartMouse.X;
         var edgeGap = ScaleLogical(EdgeGap);
         Left = Math.Clamp(desiredX, taskbar.Left + edgeGap, taskbar.Right - Width - edgeGap);
     }
 
     private void OnDragEnd(object? sender, MouseEventArgs eventArgs)
     {
-        if (!_dragging || eventArgs.Button != MouseButtons.Left)
+        if (!_mousePressed || eventArgs.Button != MouseButtons.Left)
         {
             return;
         }
 
+        var dragged = _dragging;
+        var threadId = _pressedThreadId;
+        _mousePressed = false;
         _dragging = false;
+        _pressedThreadId = null;
         Capture = false;
+        if (!dragged)
+        {
+            if (threadId is not null && threadId == WorkingThreadAt(eventArgs.Location))
+            {
+                WorkingTaskRequested?.Invoke(threadId);
+            }
+            return;
+        }
         if (TryGetTaskbar(_targetScreen, out _, out var taskbar))
         {
             WidgetSettings.SetOffsetX(_targetScreen.DeviceName, Left - taskbar.Left);
             WidgetSettings.SelectedPlacement = TaskbarPlacement.Custom;
             PlacementCustomized?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    internal string? WorkingThreadAt(Point point)
+    {
+        if (AgentCounterMode != AgentIndicatorMode.RepeatedIcons || !AgentCounterBounds.Contains(point))
+        {
+            return null;
+        }
+        var index = AgentIndicatorRenderer.TaskIndexAt(point, AgentCounterBounds, _workingAgentCount, AgentCounterSide);
+        return index >= 0 && index < _taskThreadIds.Length ? _taskThreadIds[index] : null;
     }
 
     private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96d);
