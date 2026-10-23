@@ -1,4 +1,4 @@
-THIRD-PARTY AUDIO — CodexTray completion sounds (2026-10-21)
+THIRD-PARTY AUDIO — CodexTray notification sounds (updated 2026-10-23)
 
 01: ConstructionComplete.ogg from SciFi RTS Status Vocals by Beast
 https://opengameart.org/content/scifi-rts-status-vocals
@@ -15,6 +15,16 @@ CC0: https://creativecommons.org/publicdomain/zero/1.0/
 https://kenney.nl/assets/interface-sounds
 CC0: https://creativecommons.org/publicdomain/zero/1.0/
 Original pack license preserved in licenses/Kenney-interface-sounds-License.txt.
+
+Question alerts (six clips):
+Six Hmm/Huh clips from CoquiTTS Voice Pack for Games v2 by Coqui.ai, MIT.
+Same source and full license notice as sounds 12–15 below.
+Characters: Ludvig, Royston, Brenda, Damien, Andrew, and Daisy.
+All local question WAV filenames have the prefix question_. Decoded/re-encoded
+to PCM16 WAV, preserving sample rate and channels; no trimming, normalization,
+or effects. Source paths, authors, licenses, SHA-256 hashes and durations are
+recorded per file in question-sources.json. The earlier question palettes have
+been replaced; completion sounds remain unchanged.
 
 12–15: CoquiTTS Voice Pack for Games v2 by Coqui.ai
 https://github.com/coqui-ai/coqui-voice-pack

@@ -22,6 +22,20 @@ internal sealed class AgentCompletionSound : IDisposable
     internal static string CustomSoundPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CodexTray", "sounds", "custom-completion.wav");
+    internal static string CustomQuestionSoundPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "CodexTray", "sounds", "custom-question.wav");
+
+    internal static IReadOnlyList<CompletionSound> QuestionChoices { get; } = new CompletionSound[]
+    {
+        new("None", "None (default)"),
+        new("question_ludvig_huh", "Ludvig — Huh?"),
+        new("question_royston_huh", "Royston — Huh?"),
+        new("question_brenda_huh", "Brenda — Huh?"),
+        new("question_damien_huh", "Damien — Huh?"),
+        new("question_andrew_hmm", "Andrew — Hmm..."),
+        new("question_daisy_huh", "Daisy — Huh?")
+    };
 
     internal static IReadOnlyList<CompletionSound> Choices { get; } = new CompletionSound[]
     {
@@ -39,6 +53,8 @@ internal sealed class AgentCompletionSound : IDisposable
 
     internal static string ParseSoundId(object? value) =>
         value is string id && (id == CustomSoundId || Choices.Any(sound => sound.Id == id)) ? id : "None";
+    internal static string ParseQuestionSoundId(object? value) =>
+        value is string id && (id == CustomSoundId || QuestionChoices.Any(sound => sound.Id == id)) ? id : "None";
 
     internal static bool Qualifies(TimeSpan lifetime, AgentSoundMinimumLifetime minimum) =>
         lifetime >= TimeSpan.FromSeconds((int)minimum);
@@ -53,11 +69,13 @@ internal sealed class AgentCompletionSound : IDisposable
         _ => throw new ArgumentOutOfRangeException(nameof(minimum))
     };
 
-    internal static Stream? OpenSound(string id) => ParseSoundId(id) switch
+    internal static Stream? OpenSound(string id, string? customSoundPath = null) => id switch
     {
         "None" => null,
-        CustomSoundId => OpenCustomSound(CustomSoundPath),
-        _ => typeof(AgentCompletionSound).Assembly.GetManifestResourceStream($"CodexTray.assets.sounds.{id}.wav")
+        CustomSoundId => OpenCustomSound(customSoundPath ?? CustomSoundPath),
+        _ when Choices.Any(sound => sound.Id == id) || QuestionChoices.Any(sound => sound.Id == id) =>
+            typeof(AgentCompletionSound).Assembly.GetManifestResourceStream($"CodexTray.assets.sounds.{id}.wav"),
+        _ => null
     };
 
     // Keep playback in memory so the saved file can be replaced during a preview.
@@ -142,17 +160,17 @@ internal sealed class AgentCompletionSound : IDisposable
         }
     }
 
-    internal void Play(string id)
+    internal void Play(string id, string? customSoundPath = null)
     {
         Stop();
-        if (ParseSoundId(id) == "None")
+        if (id == "None")
         {
             return;
         }
 
         try
         {
-            _stream = OpenSound(id) ?? throw new IOException("Completion sound is unavailable.");
+            _stream = OpenSound(id, customSoundPath) ?? throw new IOException("Agent sound is unavailable.");
             _player = new SoundPlayer(_stream);
             // Load first so playback failures are caught here.
             _player.Load();
@@ -160,7 +178,7 @@ internal sealed class AgentCompletionSound : IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or TimeoutException)
         {
-            AppLog.Write($"Completion sound playback failed: {exception.Message}");
+            AppLog.Write($"Agent sound playback failed: {exception.Message}");
             Stop();
         }
     }

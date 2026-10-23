@@ -39,7 +39,8 @@ immediately to widgets on all monitors and are saved under
 | Use project colors | On | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
 | Show project icon | On | Available in **One icon per task** mode. Show the project's marker as a small badge at the upper-right of each loading icon. |
 | Completion sound | None | Choose nine bundled sounds or your own PCM WAV using **Choose custom WAV file...**. Selecting a sound previews it; None disables playback. |
-| Minimum runtime for sound | 30 seconds | Choose 0, 10, 30, or 60 seconds, or 5 minutes. A turn lasting at least this long qualifies. |
+| Question sound | None | Choose six Hmm/Huh voice clips or a separate custom PCM WAV. Selecting a sound previews it. Plays once for each new structured question prompt. |
+| Minimum runtime for completion sound | 30 seconds | Choose 0, 10, 30, or 60 seconds, or 5 minutes. A turn lasting at least this long qualifies. |
 
 Working-agent icons, numbers, and spacing always use the former Large size (130%
 of the original). There is no size setting; earlier Small/Normal preferences are
@@ -71,6 +72,34 @@ restarts, so the original file can be moved or deleted. **Custom WAV file**
 reselects the saved copy after using a bundled sound; its tooltip shows the
 original filename. Choosing another custom file replaces the copy. Canceling
 the picker or selecting invalid audio leaves the previous selection intact.
+
+### Question sounds
+
+Choose **Display → Working agents → Question sound** to enable an alert when
+Codex opens a structured question prompt, including prompts with answer choices
+or a free-text answer. The default is **None**. The six bundled cues are
+Andrew — Hmm... and Ludvig, Royston, Brenda, Damien, and Daisy saying “Huh?”.
+Selecting one previews it immediately. Removed bundled selections fall back to
+None; existing custom WAV files and selections stay unchanged. See the bundled
+audio attribution for sources and licenses.
+
+Questions written only as ordinary chat text and permission/approval prompts
+are not detected. Each recorded `request_user_input` or
+`request_user_input_async` call alerts once, including questions that arrive
+just before a turn finishes. Multiple new calls found in one poll share one cue
+across all displays. If a completion is detected in that poll, an enabled
+question sound takes priority. The minimum-runtime setting applies only to
+completion sounds; question sounds do not wait for a minimum runtime.
+
+Existing questions found at startup or after log truncation stay silent, as do
+duplicate events, subagents, and factory workers hidden behind a controller.
+Standalone factory workers can alert. Questions are checked even when the
+counter or widget is hidden, and sound selections persist across restarts.
+
+The custom question WAV is copied separately to
+`%LOCALAPPDATA%\CodexTray\sounds\custom-question.wav`; choosing or replacing it
+does not change your custom completion WAV. The same PCM validation and cancel
+behavior applies to both menus. No question text is retained or logged.
 
 ### Display modes
 
@@ -169,6 +198,13 @@ the appearance of the usage batteries.
 - Session metadata identifies workers by a subagent source or a parent-task link.
   A manually forked main chat remains a separate main task and can count
   independently.
+- Factory pipeline jobs with a structured dispatch prompt share the active main
+  controller's icon when it belongs to the same factory project. Workers remain
+  visible when the controller is idle, exits, or cannot be matched, including
+  workers without a visible chat. Multiple standalone workers count separately.
+  Matching uses desktop project assignments or the factory working directory,
+  even when project colors and badges are disabled. Hidden worker completions
+  do not play a sound.
 - Turns waiting on tools, approval, or user input remain included until their
   completion or interruption is recorded. The count measures in-progress turns,
   not CPU activity.
@@ -194,7 +230,8 @@ names, locking, or event format can affect detection independently of quota
 display. Remote/cloud-only work, ephemeral sessions, and other sessions without
 the required local files are not covered.
 
-When project coloring or project badges are enabled in repeated-icon mode, CodexTray also reads
+When project coloring or project badges are enabled in repeated-icon mode, or a
+factory worker needs to be matched to its controller, CodexTray also reads
 `.codex-global-state.json` from the same Codex home directory. It interprets
 project colors and markers, task-project assignments, project-ID aliases, workspace
 hints, and local project roots. The desktop state file is not modified. Its
@@ -206,8 +243,9 @@ Project icon badges additionally read named vector assets from the local Codex
 Desktop installation. These assets are not bundled with CodexTray.
 
 Session logs can contain prompts, responses, and tool output. CodexTray reads
-the files to interpret session type, parent links, lifecycle event types, and
-turn IDs. It keeps paths, read offsets, and current turn state in memory; it does
+the files to interpret session type, parent links, lifecycle event types, turn
+IDs, and structured factory dispatch headers in user messages. It keeps paths,
+read offsets, and current turn state in memory; it does
 not save, upload, or log conversation content, change session contents, or read
 credential files.
 Activity checks do not start a model request or consume Codex tokens.

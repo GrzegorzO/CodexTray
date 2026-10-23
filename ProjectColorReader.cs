@@ -41,6 +41,8 @@ internal sealed class ProjectColorReader(string home)
 
     internal Color? Resolve(string threadId, string? workingDirectory) => _map.Resolve(threadId, workingDirectory);
     internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory) => _map.ResolveMarker(threadId, workingDirectory);
+    internal bool IsInProject(string threadId, string? workingDirectory, string projectDirectory) =>
+        _map.IsInProject(threadId, workingDirectory, projectDirectory);
 }
 
 internal sealed class ProjectColorMap
@@ -162,6 +164,22 @@ internal sealed class ProjectColorMap
             return hintedProject;
         }
         return ProjectForDirectory(workingDirectory);
+    }
+
+    internal bool IsInProject(string threadId, string? workingDirectory, string projectDirectory)
+    {
+        if (ProjectForDirectory(projectDirectory) is { } expected)
+        {
+            var actual = ProjectForTask(threadId, workingDirectory);
+            return actual is not null &&
+                string.Equals(_legacyIds.GetValueOrDefault(actual, actual), _legacyIds.GetValueOrDefault(expected, expected), StringComparison.Ordinal);
+        }
+        // CLI installations may have no desktop project metadata.
+        var directory = NormalizeDirectory(workingDirectory);
+        var root = NormalizeDirectory(projectDirectory);
+        return directory is not null && root is not null &&
+            (directory.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+             directory.StartsWith(Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
     }
 
     internal static ProjectMarker ParseMarker(JsonElement marker)

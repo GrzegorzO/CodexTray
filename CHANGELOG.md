@@ -15,6 +15,12 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Separate question sounds for new structured Codex prompts, with six Hmm/Huh
+  voice clips, previews, a separately saved custom WAV, and a silent default.
+  Removed bundled selections fall back to None; existing custom WAV files and
+  selections are preserved.
+  Alerts play once per request, skip existing history and hidden helpers, and
+  take priority over completion sounds detected in the same poll.
 - Custom completion sounds via a PCM WAV file picker, with validation, previews,
   and a saved local copy that continues working after moving the original file
 - Optional completion sounds for main tasks, with nine bundled choices, immediate
@@ -42,6 +48,9 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Hide factory-dispatched workers while a main controller in the same factory
+  project is active; show workers when running alone, including hidden sessions.
+  Hidden worker completions do not produce extra completion sounds.
 - Paint the complete widget immediately when working-agent icons appear or
   disappear, preventing a brief dark background in the resized area
 - Prevent copied parent-session metadata in subagent logs from producing

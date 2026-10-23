@@ -21,7 +21,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="assets\sounds\*.wav" />
-    <None Update="assets\sounds\ATTRIBUTION.txt;assets\sounds\licenses\*.txt"
+    <None Update="assets\sounds\ATTRIBUTION.txt;assets\sounds\question-sources.json;assets\sounds\licenses\*.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 </Project>

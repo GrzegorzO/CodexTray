@@ -22,9 +22,17 @@ Subagent sources and nonempty `parent_thread_id` links are excluded, including
 background guardian sessions. A `forked_from_id` alone does not exclude a main
 chat fork. A main task counts only while its writer lock is held and its latest
 turn has started without completing or aborting. Sessions without metadata are
-not counted. Released locks clear cached activity after process exit. Only
-session classification and lifecycle fields are interpreted; conversation
-content is neither retained nor logged. This local file format is
+not counted. Released locks clear cached activity after process exit.
+Structured user messages beginning with `Pipeline dispatch id: <UUID>` and
+containing role/round and `Factory instructions: <path>/AGENTS.md` headers
+identify factory jobs. A job is hidden only while an active non-worker main task
+matches its factory project through desktop project assignments or its working
+directory. Without a matching active controller, each worker stays visible.
+Project matching runs independently of color/badge settings and includes desktop
+project-ID aliases. Hidden worker completions are silent; user-created main-chat
+forks are preserved even when their copied history contains a dispatch.
+Only classification fields, lifecycle fields, and factory dispatch headers are
+interpreted; conversation content is neither retained nor logged. This local file format is
 an implementation dependency and does not cover remote-only or ephemeral work.
 
 The monitor also reports stopped main-turn lifetimes from lifecycle timestamps,
@@ -33,6 +41,15 @@ history establish a silent baseline. Incremental reads preserve completions
 even when the next turn starts between polls. `AgentCompletionSound` plays an
 embedded PCM WAV asynchronously when any stop meets the saved minimum runtime;
 simultaneous stops share one cue, independent of widgets and display settings.
+Structured `request_user_input` and `request_user_input_async` function calls
+are validated for a nonempty question and deduplicated by call ID. The initial
+read and a truncated log establish a silent baseline. A session first discovered
+later can still alert for a question timestamped after monitoring began, so a
+quick question in a new chat is not missed. Main tasks and standalone factory workers qualify even
+if the turn finishes in the same read. Subagents and hidden factory workers do
+not. A separately persisted question-sound selection has six embedded Hmm/Huh PCM WAV
+choices and its own managed custom WAV. An enabled question cue takes priority
+over a completion found in the same poll, with no minimum-runtime requirement.
 Sound IDs are validated against the bundled catalog. Audio is embedded for
 single-file publishing, with attribution and license notices copied alongside
 the executable. Defaults are None and 30 seconds.
@@ -75,8 +92,9 @@ reloads; partial writes preserve the last valid mapping. Explicit project
 assignments win over workspace hints and the longest unambiguous root match.
 Projectless or unmatched tasks and unsupported/default colors use the normal
 icon accent. Palette tokens use the desktop dark-sidebar RGB values. No desktop
-state is read for project appearance while both options are off or in icon-and-number mode,
-and no Codex settings or state files are written.
+state is needed for project appearance while both options are off or in
+icon-and-number mode; factory-controller matching can still read it in those
+modes. No Codex settings or state files are written.
 
 Project markers travel alongside the color in `WorkingTask`. The independent
 `Show project icon` preference draws a stationary badge at the upper-right of

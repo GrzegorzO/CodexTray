@@ -1,0 +1,89 @@
+{
+  "changes": "Decoded/re-encoded as PCM16 WAV preserving sample rate and channels; no trimming, normalization or effects.",
+  "files": [
+    {
+      "id": "question_ludvig_huh",
+      "title": "Ludvig — Huh?",
+      "source": "voice_pack_v2/ludvig_milivoj/misceallaneous_huh.wav",
+      "target": "question_ludvig_huh.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.255,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "336199280e6a4fa7fcd2b7d63fddfadf533dd81915a24e8e3078766225e6611f",
+      "output_sha256": "336199280e6a4fa7fcd2b7d63fddfadf533dd81915a24e8e3078766225e6611f"
+    },
+    {
+      "id": "question_royston_huh",
+      "title": "Royston — Huh?",
+      "source": "voice_pack_v2/royston_min/misceallaneous_huh.wav",
+      "target": "question_royston_huh.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.267,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "88ed84783e68e0f51836023ff4b16ad10120f038aa923772ab80f6312f0fe1cb",
+      "output_sha256": "88ed84783e68e0f51836023ff4b16ad10120f038aa923772ab80f6312f0fe1cb"
+    },
+    {
+      "id": "question_brenda_huh",
+      "title": "Brenda — Huh?",
+      "source": "voice_pack_v2/brenda_stern/misceallaneous_huh.wav",
+      "target": "question_brenda_huh.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.255,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "39575da8e5d2a8b556f4ffdfdd78ac8ffae094c4273799f94fb2180844e6e4ff",
+      "output_sha256": "39575da8e5d2a8b556f4ffdfdd78ac8ffae094c4273799f94fb2180844e6e4ff"
+    },
+    {
+      "id": "question_damien_huh",
+      "title": "Damien — Huh?",
+      "source": "voice_pack_v2/damien_black/misceallaneous_huh.wav",
+      "target": "question_damien_huh.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.255,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "cd3f301e04c2ef1f06d80a101ce8a386f31f2314e2b57b2f208f4590a8f2aaae",
+      "output_sha256": "cd3f301e04c2ef1f06d80a101ce8a386f31f2314e2b57b2f208f4590a8f2aaae"
+    },
+    {
+      "id": "question_andrew_hmm",
+      "title": "Andrew — Hmm...",
+      "source": "voice_pack_v2/andrew_chipper/misceallaneous_hmm.wav",
+      "target": "question_andrew_hmm.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.453,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "d9e30f80095f9cbb53d5a6f13d269cab1bda6375059ce066cc34166e4a2444d0",
+      "output_sha256": "d9e30f80095f9cbb53d5a6f13d269cab1bda6375059ce066cc34166e4a2444d0"
+    },
+    {
+      "id": "question_daisy_huh",
+      "title": "Daisy — Huh?",
+      "source": "voice_pack_v2/daisy_studious/misceallaneous_huh.wav",
+      "target": "question_daisy_huh.wav",
+      "source_url": "https://github.com/coqui-ai/coqui-voice-pack/releases/tag/v2",
+      "license": "MIT",
+      "author": "Coqui.ai",
+      "seconds": 0.255,
+      "rate": 44100,
+      "channels": 1,
+      "source_sha256": "24c72688356af2e5c72553747ab8263ed812f51c6c59456836e6a05aec67e109",
+      "output_sha256": "24c72688356af2e5c72553747ab8263ed812f51c6c59456836e6a05aec67e109"
+    }
+  ]
+}

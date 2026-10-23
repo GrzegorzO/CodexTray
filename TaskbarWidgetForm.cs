@@ -1529,6 +1529,34 @@ internal static class WidgetSettings
         set => WriteEnum("AgentSoundMinimumLifetime", value);
     }
 
+    public static string SelectedAgentQuestionSound
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
+            return AgentCompletionSound.ParseQuestionSoundId(key?.GetValue("AgentQuestionSound"));
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+            key.SetValue("AgentQuestionSound", AgentCompletionSound.ParseQuestionSoundId(value), RegistryValueKind.String);
+        }
+    }
+
+    public static string CustomAgentQuestionSoundName
+    {
+        get
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
+            return key?.GetValue("CustomAgentQuestionSoundName") as string ?? string.Empty;
+        }
+        set
+        {
+            using var key = Registry.CurrentUser.CreateSubKey(KeyPath, writable: true);
+            key.SetValue("CustomAgentQuestionSoundName", value, RegistryValueKind.String);
+        }
+    }
+
     public static string CustomAgentCompletionSoundName
     {
         get

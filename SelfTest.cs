@@ -16,6 +16,7 @@ internal static class SelfTest
             VerifyTaskbarVisibility();
             VerifyAgentActivity();
             VerifyAgentCompletionSounds();
+            VerifyQuestionAlerts();
             VerifyCustomCompletionSound();
             VerifyMainTaskCounting();
             VerifyWidgetTextDpi();
@@ -185,6 +186,17 @@ internal static class SelfTest
             "ancestor metadata cannot replace the owner's classification or project directory");
         state.Apply("""{"type":"turn_context","payload":{"cwd":"C:\\Worktrees\\Main"}}""");
         Assert(state.WorkingDirectory == @"C:\Worktrees\Main" && state.IsMainTask, "turn working directory updates without changing task classification");
+        var dispatchState = new AgentActivityMonitor.ActivityState("worker");
+        const string dispatch = "Pipeline dispatch id: 11111111-2222-3333-4444-555555555555\nRole: tester; round: 1/3.\nFactory instructions: C:/Projects/Factory/AGENTS.md\n";
+        Dispatch("assistant", dispatch);
+        Assert(dispatchState.FactoryDirectory is null, "an assistant quoting a dispatch cannot classify the session as a factory worker");
+        Dispatch("user", dispatch.Replace("11111111-2222-3333-4444-555555555555", "invalid", StringComparison.Ordinal));
+        Assert(dispatchState.FactoryDirectory is null, "an invalid dispatch ID does not identify a factory worker");
+        Dispatch("user", dispatch);
+        Assert(dispatchState.FactoryDirectory == @"C:\Projects\Factory", "a structured user dispatch identifies the factory independently of its installation path");
+        dispatchState.Apply("""{"type":"session_meta","payload":{"id":"worker","source":"vscode","forked_from_id":"original"}}""");
+        Dispatch("user", dispatch);
+        Assert(dispatchState.IsMainTask && dispatchState.FactoryDirectory is null, "copied dispatch history does not hide a user-created main-chat fork");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_started","turn_id":"one"}}""");
         Assert(state.IsWorking, "started turn is working");
         state.Apply("""{"type":"event_msg","payload":{"type":"task_complete","turn_id":"previous"}}""");
@@ -249,6 +261,117 @@ internal static class SelfTest
             Directory.Delete(sessions.FullName);
             Directory.Delete(home);
         }
+
+        void Append(string text)
+        {
+            stream.Position = stream.Length;
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(text));
+        }
+
+        void Dispatch(string role, string text) => dispatchState.Apply(JsonSerializer.Serialize(new
+        {
+            type = "response_item",
+            payload = new { type = "message", role, content = new[] { new { type = "input_text", text } } }
+        }));
+    }
+
+    private static string QuestionEvent(string callId, string tool = "request_user_input_async", string? arguments = null, DateTimeOffset? timestamp = null) =>
+        JsonSerializer.Serialize(new
+        {
+            type = "response_item",
+            timestamp,
+            payload = new
+            {
+                type = "function_call",
+                name = tool,
+                call_id = callId,
+                arguments = arguments ?? """{"questions":[{"title":"Choose an option","options":["One","Two"]}]}"""
+            }
+        });
+
+    private static void VerifyQuestionAlerts()
+    {
+        Assert(AgentCompletionSound.ParseQuestionSoundId(null) == "None" &&
+            AgentCompletionSound.ParseQuestionSoundId("missing") == "None", "question sounds default to silent and reject unknown IDs");
+        Assert(AgentCompletionSound.ParseQuestionSoundId("question_ludvig_huh") == "question_ludvig_huh" &&
+            AgentCompletionSound.ParseSoundId("question_ludvig_huh") == "None", "question selection is independent of completion selection");
+        Assert(AgentCompletionSound.ParseQuestionSoundId("question_robot_unit_ready") == "None" &&
+            AgentCompletionSound.ParseQuestionSoundId("question_ludvig_whats_up") == "None", "removed question sounds fall back to None");
+        Assert(AgentCompletionSound.ParseQuestionSoundId(AgentCompletionSound.CustomSoundId) == AgentCompletionSound.CustomSoundId,
+            "custom question selections remain supported");
+        Assert(AgentCompletionSound.CustomQuestionSoundPath != AgentCompletionSound.CustomSoundPath,
+            "custom question and completion sounds have separate saved copies");
+        Assert(AgentCompletionSound.QuestionChoices.Count == 7 && AgentCompletionSound.QuestionChoices.Select(sound => sound.Id).Distinct().Count() == 7,
+            "six distinct Hmm/Huh question sounds plus None");
+        Assert(AgentCompletionSound.QuestionChoices.Skip(1).All(sound => sound.Id.EndsWith("_hmm", StringComparison.Ordinal) || sound.Id.EndsWith("_huh", StringComparison.Ordinal)) &&
+            typeof(AgentCompletionSound).Assembly.GetManifestResourceNames().Count(name => name.Contains(".question_", StringComparison.Ordinal) && name.EndsWith(".wav", StringComparison.Ordinal)) == 6,
+            "only Hmm/Huh question clips are offered and embedded; removed clips are absent");
+        foreach (var sound in AgentCompletionSound.QuestionChoices.Skip(1))
+        {
+            using var audio = AgentCompletionSound.OpenSound(sound.Id);
+            Assert(audio is not null, "question audio is embedded");
+            using var player = new System.Media.SoundPlayer(audio!);
+            player.Load();
+            Assert(player.IsLoadCompleted, "question audio is a playable WAV");
+        }
+
+        using var stream = new MemoryStream();
+        var state = new AgentActivityMonitor.ActivityState("main");
+        Append(QuestionEvent("historical") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "existing questions at startup never replay");
+        Append(QuestionEvent("new") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 1, "one new asynchronous question emits one alert");
+        Append(QuestionEvent("new") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "duplicate call IDs do not repeat the question alert");
+        Append(QuestionEvent("partial"));
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "incomplete question lines wait for newline");
+        Append("\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 1, "completed question lines alert once");
+        Append(QuestionEvent("sync", "request_user_input", """{"questions":[{"question":"What next?"}]}""") + "\n");
+        Append(QuestionEvent("namespaced", "functions.request_user_input_async") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 2, "synchronous and namespaced question calls are supported");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "idle polling never repeats a question");
+        Append(QuestionEvent("empty", arguments: """{"questions":[]}""") + "\n");
+        Append(QuestionEvent("malformed", arguments: "{") + "\n");
+        Append(QuestionEvent("wrong-tool", "other_request_user_input") + "\n");
+        Append(QuestionEvent("quoted").Replace("\"function_call\"", "\"function_call_output\"", StringComparison.Ordinal) + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "empty, malformed, unrelated and quoted calls do not alert");
+        stream.SetLength(0);
+        Append(QuestionEvent("rewritten") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 0, "truncated history establishes a new silent baseline");
+        Append(QuestionEvent("after-truncation") + "\n");
+        state.Read(stream, CancellationToken.None);
+        Assert(state.NewQuestionCount == 1, "new questions still alert after truncation");
+
+        using var discoveredStream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(
+            QuestionEvent("old", timestamp: DateTimeOffset.UnixEpoch.AddSeconds(90)) + "\n" +
+            QuestionEvent("fresh", timestamp: DateTimeOffset.UnixEpoch.AddSeconds(110)) + "\n"));
+        var discovered = new AgentActivityMonitor.ActivityState("new", DateTimeOffset.UnixEpoch.AddSeconds(100));
+        discovered.Read(discoveredStream, CancellationToken.None);
+        Assert(discovered.NewQuestionCount == 1, "first discovery alerts for questions recorded after monitoring began, excluding older history");
+        discoveredStream.SetLength(0);
+        discovered.Read(discoveredStream, CancellationToken.None);
+        Assert(discovered.NewQuestionCount == 0, "truncation of a newly discovered session clears the initial notification allowance");
+
+        var customQuestionPath = Path.Combine(Path.GetTempPath(), $"CodexTray-question-test-{Guid.NewGuid():N}.wav");
+        try
+        {
+            using (var audio = AgentCompletionSound.OpenSound("question_ludvig_huh")!)
+            using (var file = File.Create(customQuestionPath)) { audio.CopyTo(file); }
+            using var custom = AgentCompletionSound.OpenSound(AgentCompletionSound.CustomSoundId, customQuestionPath);
+            Assert(custom is not null && custom.Length == new FileInfo(customQuestionPath).Length,
+                "question custom playback opens its explicit saved path instead of the completion file");
+        }
+        finally { File.Delete(customQuestionPath); }
 
         void Append(string text)
         {
@@ -412,6 +535,7 @@ internal static class SelfTest
         var sessions = Directory.CreateDirectory(Path.Combine(home, "sessions"));
         var fixtures = new List<(string Lock, string Rollout, FileStream Writer)>();
         var appearancePath = Path.Combine(home, ".codex-global-state.json");
+        string[] factoryRoots = [@"C:\Projects\Factory"];
         try
         {
             var main = AddTask("vscode", idOverride: "ffffffff-ffff-ffff-ffff-ffffffffffff");
@@ -422,8 +546,23 @@ internal static class SelfTest
             AddTask("vscode", parent: main.Id);
             var second = AddTask("cli", acquireLock: false, idOverride: "00000000-0000-0000-0000-000000000001");
             var fork = AddTask("vscode", forkedFrom: main.Id, acquireLock: false);
+            var factoryWorker = AddTask("vscode", acquireLock: false);
+            File.AppendAllText(factoryWorker.Rollout, JsonSerializer.Serialize(new
+            {
+                type = "response_item",
+                payload = new
+                {
+                    type = "message",
+                    role = "user",
+                    content = new[] { new { type = "input_text", text = "Pipeline dispatch id: 11111111-2222-3333-4444-555555555555\nIssue LOCAL-1: Test\nRole: tester; round: 1/3.\nFactory instructions: C:/Projects/Factory/AGENTS.md\n" } }
+                }
+            }) + "\n");
             var monitor = new AgentActivityMonitor(home);
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "one main task with guardian and workers counts once");
+            File.AppendAllText(main.Rollout, QuestionEvent("main-question") + "\n");
+            File.AppendAllText(worker.Rollout, QuestionEvent("subagent-question") + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1 && monitor.NewQuestionCount == 1,
+                "only the main task's new question is reported, not a subagent's");
             WriteAppearance("green");
             var colored = monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single();
             Assert(colored.ThreadId == main.Id && colored.ProjectColor == ProjectColorMap.ParseColor("green"), "color belongs to the main task, not its helpers");
@@ -461,6 +600,50 @@ internal static class SelfTest
             second.Writer.Unlock(0, 1);
             fork.Writer.Unlock(0, 1);
             Assert(monitor.ReadCount(CancellationToken.None) == 0, "only running subagents cannot leave a visible main-task count");
+
+            factoryWorker.Writer.Lock(0, 1);
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == factoryWorker.Id,
+                "a factory worker without an active controller stays visible");
+            File.AppendAllText(factoryWorker.Rollout, QuestionEvent("standalone-question") + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1 && monitor.NewQuestionCount == 1, "a standalone factory worker's question alerts");
+            second.Writer.Lock(0, 1);
+            Assert(monitor.ReadCount(CancellationToken.None) == 2, "an unrelated active main chat cannot hide a standalone factory worker");
+            second.Writer.Unlock(0, 1);
+            WriteAppearance("green");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"controller"}}""" + "\n");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == main.Id,
+                "a factory worker is hidden behind an active controller matched by project assignment even with colors off");
+            File.AppendAllText(factoryWorker.Rollout, QuestionEvent("hidden-question") + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1 && monitor.NewQuestionCount == 0, "hidden factory workers do not produce duplicate question alerts");
+            File.Delete(appearancePath);
+            Assert(monitor.ReadCount(CancellationToken.None) == 2, "unavailable project matching keeps the worker visible");
+            File.AppendAllText(main.Rollout, """{"type":"turn_context","payload":{"cwd":"C:\\Projects\\Factory"}}""" + "\n");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == main.Id,
+                "a controller in the factory directory hides its worker without desktop metadata");
+            File.AppendAllText(main.Rollout, """{"type":"turn_context","payload":{"cwd":"C:\\Projects\\FactoryElsewhere"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 2, "a directory with a shared prefix does not match the factory");
+            WriteAppearance("green");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == main.Id, "desktop assignment matches a controller outside the factory directory");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"controller"}}""" + "\n");
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == factoryWorker.Id,
+                "an idle loaded controller does not hide its worker");
+            File.AppendAllText(main.Rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"controller-again"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1, "resuming the controller hides the worker again");
+            main.Writer.Unlock(0, 1);
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == factoryWorker.Id,
+                "a released controller lock reveals a still-running factory worker");
+            main.Writer.Lock(0, 1);
+            Assert(monitor.ReadTasks(CancellationToken.None).Single().ThreadId == main.Id, "reacquiring the active controller hides its worker");
+            File.AppendAllText(factoryWorker.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"active"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1 && monitor.StoppedLifetimes.Count == 0,
+                "a hidden factory worker completion does not play a sound");
+            main.Writer.Unlock(0, 1);
+            monitor.ReadCount(CancellationToken.None);
+            File.AppendAllText(factoryWorker.Rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"standalone"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 1, "a new standalone factory turn counts");
+            File.AppendAllText(factoryWorker.Rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"standalone"}}""" + "\n");
+            Assert(monitor.ReadCount(CancellationToken.None) == 0 && monitor.StoppedLifetimes.Count == 1,
+                "a visible standalone worker completion still produces a sound candidate");
         }
         finally
         {
@@ -507,6 +690,7 @@ internal static class SelfTest
             File.WriteAllText(appearancePath, JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 ["project-appearances"] = new Dictionary<string, object> { ["main-project"] = new { color, marker = new { kind = "icon", icon = "plane" } } },
+                ["local-projects"] = new Dictionary<string, object> { ["main-project"] = new { rootPaths = factoryRoots } },
                 ["thread-project-assignments"] = assignments
             }));
         }

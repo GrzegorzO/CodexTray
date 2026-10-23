@@ -29,6 +29,7 @@ use unreleased features; check the changelog when using a release archive.
 - Live main-task activity with eleven loading-icon styles, including an
   animated robot head; hidden entirely when idle
 - Optional sounds when main tasks stop, with nine bundled choices and a minimum runtime
+- Separate question alerts with six Hmm/Huh voice clips, previews, and custom WAV support
 - Counter at the far left or right (default), centered vertically, with optional
   animation and synchronization
 - Working-agent icons use a fixed, large size for readability
@@ -109,7 +110,8 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Use project colors** | On by default; available in One icon per task mode to color each icon by its task's project |
 | **Display → Working agents → Show project icon** | On by default; add a small project-colored badge at the upper-right of each task icon, independently of loading-icon coloring |
 | **Display → Working agents → Completion sound** | None (default), nine bundled sounds, or your own PCM WAV via **Choose custom WAV file...**; selecting a sound previews it |
-| **Display → Working agents → Minimum runtime for sound** | 0, 10, 30 (default), or 60 seconds, or 5 minutes |
+| **Display → Working agents → Question sound** | None (default), six Hmm/Huh voice clips, or a separate custom WAV; alert once for a new structured question prompt |
+| **Display → Working agents → Minimum runtime for completion sound** | 0, 10, 30 (default), or 60 seconds, or 5 minutes |
 | **Start with Windows** | Toggle per-user automatic startup |
 
 Dragging a widget horizontally switches that display to custom placement.
@@ -137,8 +139,11 @@ Codex is idle. Open **Display → Working agents** to change its appearance.
 
 The activity indicator shows an icon and the number of in-progress main Codex
 tasks. Subagents and background helpers are excluded, so one main task with
-several workers still shows `1`. A main turn waiting on a tool, approval, or user
-input still counts until completion or interruption. The indicator is vertically
+several workers still shows `1`. Factory-dispatched workers share an active
+controller's icon within the same factory project; workers running
+without an active matching controller remain visible, including hidden sessions.
+A main turn waiting on a tool, approval, or user input still counts until
+completion or interruption. The indicator is vertically
 centered beside the full battery, label, and percentage group. At zero, both the
 icon and count disappear and the widget releases that space. Turning off animation
 keeps the selected icon static.
@@ -167,7 +172,7 @@ Named badges use the installed Codex Desktop app's vector shapes with transparen
 backgrounds; built-in drawings cover unavailable or unsupported desktop assets.
 
 Choose **Completion sound** to hear when a main task completes, is interrupted,
-or exits after running for at least **Minimum runtime for sound**. Runtime means
+or exits after running for at least **Minimum runtime for completion sound**. Runtime means
 the current turn, including tool and approval waits. Sound defaults to **None**,
 and the minimum runtime defaults to **30 seconds**. Sounds work with the counter
 or widget hidden. Stops detected in the same activity poll share one cue, and
@@ -181,6 +186,14 @@ original file. Switch back to it with **Custom WAV file**, or choose another fil
 to replace it. Canceling or selecting invalid audio keeps the previous selection.
 
 ![Agent indicator display modes and positions](docs/images/agent-layout-gallery.png)
+
+Choose **Question sound** for an alert when Codex opens a structured question
+prompt. It has six Hmm/Huh voice clips, immediate previews, a separately saved
+custom WAV, and a silent default. Each new request alerts once; startup history,
+duplicates, subagents, and hidden factory workers stay silent. A worker running
+alone can alert. Question sounds work with the widget hidden, have no minimum
+runtime, and take priority over a completion detected in the same poll.
+Ordinary questions in chat text and approval requests are not detected.
 
 ![Example project colors with repeated task icons](docs/images/project-colors-gallery.png)
 
@@ -210,11 +223,10 @@ versions; no minimum compatible Codex version has been established. If the files
 are missing or incompatible, an absent indicator does not prove all agents are idle.
 The monitor reads locally on a background thread and sends no model requests.
 Animation runs only while a visible widget has a nonzero count.
-Project coloring additionally reads Codex Desktop's local
-`.codex-global-state.json` when coloring or project badges are enabled in repeated-icon mode. It uses task-project
-assignments, workspace hints, and project roots to resolve colors. This desktop
-state format can change too; unavailable mappings fall back to the normal blue
-without affecting the main-task count.
+Project coloring and factory-controller matching additionally read Codex Desktop's
+local `.codex-global-state.json`. It uses task-project assignments, workspace hints,
+and project roots. This desktop state format can change too; unavailable mappings
+fall back to the normal blue and keep standalone factory workers visible.
 
 CodexTray checks `CODEXTRAY_CODEX_PATH`, then `PATH`, then the Codex Desktop
 installation below `%LOCALAPPDATA%\OpenAI\Codex\bin`.
@@ -249,8 +261,8 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - Agent activity reads local Codex session logs, which can contain conversation
   content, to inspect session metadata and turn lifecycle events. CodexTray does
   not upload, save, or log that content, and does not change session-file contents.
-- Project coloring and badges read local desktop project metadata only while enabled in
-  repeated-icon mode. It does not modify Codex's state or project settings.
+- Project coloring, badges, and factory-controller matching read local desktop
+  project metadata. It does not modify Codex's state or project settings.
 - Project badges read named vector shapes from the installed desktop app's local
   archive without executing its JavaScript. Those assets are not bundled here.
 - No model prompts or generation requests
