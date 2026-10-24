@@ -49,6 +49,7 @@ internal static class ScreenshotExporter
             RenderAgentLayoutGallery(outputDirectory, snapshot);
             RenderProjectColorGallery(outputDirectory, snapshot);
             RenderProjectColorGallery(outputDirectory, snapshot, showProjectIcons: true);
+            RenderTaskTooltipGallery(outputDirectory, snapshot);
             return 0;
         }
         catch (Exception exception)
@@ -56,6 +57,47 @@ internal static class ScreenshotExporter
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void RenderTaskTooltipGallery(string outputDirectory, UsageSnapshot snapshot)
+    {
+        using var gallery = new Bitmap(840, 226);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
+        using var captionFont = new Font("Segoe UI", 9);
+        using var text = new SolidBrush(Color.White);
+        graphics.DrawString("Working agents · project and elapsed time", titleFont, text, 18, 12);
+        graphics.DrawString("Static tooltip examples · synthetic project · native tooltip appearance follows Windows", captionFont, text, 18, 40);
+        var now = DateTimeOffset.UnixEpoch.AddHours(1);
+        int[] elapsedSeconds = [42, 135, 383];
+        string[] captions = ["Below one minute", "One through five minutes", "Above five minutes"];
+        for (var index = 0; index < elapsedSeconds.Length; index++)
+        {
+            var card = new Rectangle(12 + index * 276, 70, 264, 144);
+            using var background = new SolidBrush(TaskbarColor);
+            graphics.FillRectangle(background, card);
+            graphics.DrawString(captions[index], captionFont, text, card.X + 12, card.Y + 8);
+            var task = new WorkingTask("sample", null, ProjectColorMap.ParseColor("green"), ProjectMarker.Folder,
+                "Example project", now.AddSeconds(-elapsedSeconds[index]));
+            using var menu = new ContextMenuStrip();
+            using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+            widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, AgentIndicatorPosition.Right,
+                AgentIndicatorMode.RepeatedIcons, useProjectColors: true, showProjectIcons: true);
+            widget.SetSnapshot(snapshot);
+            widget.SetWorkingTasks([task]);
+            using var preview = widget.RenderPreview(TaskbarColor, 1.4f);
+            graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 32);
+            var tooltipBounds = new Rectangle(card.X + 12, card.Y + 100, 240, 30);
+            using var tooltipBackground = new SolidBrush(SystemColors.Info);
+            using var tooltipBorder = new Pen(SystemColors.InfoText);
+            using var tooltipText = new SolidBrush(SystemColors.InfoText);
+            graphics.FillRectangle(tooltipBackground, tooltipBounds);
+            graphics.DrawRectangle(tooltipBorder, tooltipBounds);
+            graphics.DrawString(task.ToTooltip(now), captionFont, tooltipText, tooltipBounds.X + 8, tooltipBounds.Y + 6);
+        }
+        gallery.Save(Path.Combine(outputDirectory, "task-tooltips-gallery.png"), ImageFormat.Png);
     }
 
     private static void RenderProjectColorGallery(string outputDirectory, UsageSnapshot snapshot, bool showProjectIcons = false)

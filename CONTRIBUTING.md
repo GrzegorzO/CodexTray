@@ -46,5 +46,26 @@ Describe the motivation, implementation, and manual verification. Include a
 tightly cropped screenshot for visual changes and avoid exposing usernames,
 notification icons, clocks, or other personal desktop information.
 
+## Before every push
+
+Every push must include documentation appropriate to its changes. For a feature,
+fix, or default change, add or update its **Unreleased** changelog entry and keep
+the affected README sections, feature guides, and architecture notes consistent
+with the implementation. Documentation-only corrections should explain what was
+corrected in the commit; do not invent a product change. Keep unreleased behavior
+distinct from versioned releases.
+
+Review the complete staged diff and file list for private data, local build
+outputs, logs, and extracted Codex assets. Use synthetic project/session fixtures
+and cropped previews; retain source attribution and required license notices
+for redistributed assets. Keep `bin/`, `obj/`, `dist/`, and `publish/` untracked.
+
+Run the applicable local workflow above and `git diff --check` before pushing.
+Document the reason for the change, resulting behavior, validation actually run,
+and any untested scenarios in the commit body or pull request. Do not claim
+manual display testing or CI success without evidence. Check the pushed revision's
+CI result and report failures or pending checks. See [AGENTS.md](AGENTS.md) for
+the corresponding instructions for coding agents.
+
 By contributing, you agree that your contribution is licensed under the MIT
 License included in this repository.

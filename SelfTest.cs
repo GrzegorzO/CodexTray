@@ -25,6 +25,7 @@ internal static class SelfTest
             VerifyAgentIndicator();
             VerifyAgentPresentationPaint();
             VerifyWorkingTaskNavigation();
+            VerifyWorkingTaskTooltip();
             using var document = JsonDocument.Parse("""
                 {
                   "rateLimits": {},
@@ -417,6 +418,7 @@ internal static class SelfTest
         Event("task_started", "active-at-startup", 100);
         state.Read(stream, CancellationToken.None);
         Assert(state.IsWorking && state.StoppedLifetimes.Count == 0, "historical completions are silent while an existing active turn is retained");
+        Assert(state.StartedAt == DateTimeOffset.UnixEpoch.AddSeconds(100), "active tooltip runtime retains its recorded start at startup");
         Event("task_started", "active-at-startup", 110);
         Event("task_complete", "older-turn", 120);
         Event("task_complete", "active-at-startup", 130);
@@ -428,6 +430,7 @@ internal static class SelfTest
         state.Read(stream, CancellationToken.None);
         Assert(state.IsWorking && state.StoppedLifetimes.SequenceEqual(new[] { TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(10) }),
             "turn timestamps survive startup, duplicate starts, stale/duplicate completions, rapid restarts and interruption");
+        Assert(state.StartedAt == DateTimeOffset.UnixEpoch.AddSeconds(160), "tooltip runtime resets with each new turn");
         state.Read(stream, CancellationToken.None);
         Assert(state.StoppedLifetimes.Count == 0, "incremental reads drain sound candidates once");
         stream.SetLength(0);
@@ -572,6 +575,9 @@ internal static class SelfTest
                 "incrementally copied parent metadata cannot promote a worker to a duplicate main task");
             Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectColor is null, "project metadata is optional when colors are off");
             Assert(monitor.ReadTasks(CancellationToken.None).Single().ProjectMarker is null, "project markers are not read when both options are off");
+            var tooltipTask = monitor.ReadTasks(CancellationToken.None).Single();
+            Assert(tooltipTask.ProjectName == "Factory project" && tooltipTask.StartedAt.HasValue,
+                "task hover metadata is available with colors and badges off");
             WriteAppearance("red");
             Assert(monitor.ReadTasks(CancellationToken.None, includeProjectColors: true).Single().ProjectColor == ProjectColorMap.ParseColor("red"),
                 "project recoloring updates without restarting a main task");
@@ -690,7 +696,7 @@ internal static class SelfTest
             File.WriteAllText(appearancePath, JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 ["project-appearances"] = new Dictionary<string, object> { ["main-project"] = new { color, marker = new { kind = "icon", icon = "plane" } } },
-                ["local-projects"] = new Dictionary<string, object> { ["main-project"] = new { rootPaths = factoryRoots } },
+                ["local-projects"] = new Dictionary<string, object> { ["main-project"] = new { name = "Factory project", rootPaths = factoryRoots } },
                 ["thread-project-assignments"] = assignments
             }));
         }
@@ -716,7 +722,7 @@ internal static class SelfTest
                 "local:fixture": { "main-project": "canonical-project" }
               },
               "local-projects": {
-                "main-project": { "rootPaths": ["C:\\Projects\\Main"] },
+                "main-project": { "name": "Main project", "rootPaths": ["C:\\Projects\\Main"] },
                 "nested-project": { "rootPaths": ["C:\\Projects\\Main\\Nested"] },
                 "other-project": { "rootPaths": ["C:\\Projects\\Other"] }
               },
@@ -728,6 +734,12 @@ internal static class SelfTest
         var green = ProjectColorMap.ParseColor("green");
         Assert(map.Resolve("assigned", @"C:\Projects\Other") == green, "explicit project assignment wins over working directory");
         Assert(map.Resolve("canonical", null) == green, "migrated project IDs resolve legacy appearance colors");
+        Assert(map.ResolveName("assigned", @"C:\Projects\Other") == "Main project", "tooltip name follows explicit project assignment");
+        Assert(map.ResolveName("canonical", null) == "Main project", "tooltip names resolve migrated project IDs");
+        Assert(map.ResolveName("worktree", @"C:\Worktrees\Detached") == "Main project", "worktree tooltip uses the project name");
+        Assert(map.ResolveName("unassigned", @"C:\Projects\Main\Nested\src") == "Nested", "unnamed projects use their root folder name");
+        Assert(map.ResolveName("projectless", @"C:\Projects\Main") is null, "projectless tooltip does not borrow a workspace project name");
+        Assert(map.ResolveName("cli", @"C:\Work\Example") == "Example", "CLI hover falls back to the workspace folder name");
         Assert(map.ResolveMarker("canonical", null) == new ProjectMarker("plane"), "migrated project IDs resolve their marker");
         Assert(map.ResolveMarker("worktree", @"C:\Worktrees\Detached") == new ProjectMarker("plane"), "worktree marker follows the project assignment");
         Assert(map.ResolveMarker("default", null) == ProjectMarker.Folder, "known projects without marker metadata get a folder badge");
@@ -1066,6 +1078,45 @@ internal static class SelfTest
                             $"{side} {mode} animation={animate} count={count} paints a complete frame before returning");
                     }
                 }
+    }
+
+    private static void VerifyWorkingTaskTooltip()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        var task = new WorkingTask("main", null, ProjectName: "Example", StartedAt: start);
+        foreach (var (seconds, expected) in new (double, string)[]
+        {
+            (-1, "0s"), (0, "0s"), (59.9, "59s"), (60, "1m 0s"),
+            (135, "2m 15s"), (299, "4m 59s"), (300, "5m 0s"),
+            (301, "5m"), (360, "6m"), (3661, "61m")
+        })
+        {
+            Assert(task.ToTooltip(start.AddSeconds(seconds)) == $"Example · {expected}", "working-task elapsed time format");
+        }
+        Assert(new WorkingTask("main", null).ToTooltip(start) == "No project", "missing hover metadata has a clear fallback");
+
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        var tooltip = (ToolTip)typeof(TaskbarWidgetForm).GetField("_tooltip",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(widget)!;
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+        {
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons);
+            widget.SetWorkingTasks([task, task with { ThreadId = "second", ProjectName = "Other" }]);
+            for (var index = 0; index < 2; index++)
+            {
+                var x = widget.AgentCounterBounds.Left + (int)((AgentIndicatorRenderer.IconXFor(index, 2, side) + 8) * AgentIndicatorRenderer.Scale);
+                typeof(Control).GetMethod("OnMouseMove", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                    .Invoke(widget, [new MouseEventArgs(MouseButtons.None, 0, x, widget.ClientSize.Height / 2, 0)]);
+                Assert(tooltip.GetToolTip(widget)?.StartsWith(index == 0 ? "Example · " : "Other · ", StringComparison.Ordinal) == true,
+                    "hover details follow the matching icon on either side with animation off");
+            }
+            widget.SetWorkingTasks([task, task with { ThreadId = "second", ProjectName = "Renamed", StartedAt = DateTimeOffset.UtcNow.AddSeconds(-20) }]);
+            Assert(tooltip.GetToolTip(widget)?.StartsWith("Renamed · 20s", StringComparison.Ordinal) == true, "same-count name and runtime changes refresh a stationary hover");
+            typeof(Control).GetMethod("OnMouseLeave", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(widget, [EventArgs.Empty]);
+            Assert(tooltip.GetToolTip(widget)?.Contains("Codex usage", StringComparison.Ordinal) == true, "leaving icons restores the usage tooltip");
+        }
     }
 
     private static void VerifyWorkingTaskNavigation()

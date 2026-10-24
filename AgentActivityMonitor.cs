@@ -95,10 +95,8 @@ internal sealed class AgentActivityMonitor
             }
         }
 
-        if (includeProjectColors || observed.Any(state => state.FactoryDirectory is not null))
-        {
-            _projectColors.Refresh();
-        }
+        // Project names are needed for hover details even when icon colors and badges are off.
+        _projectColors.Refresh();
         var controllers = observed.Where(state => state.IsWorking && state.IsMainTask && state.FactoryDirectory is null).ToArray();
         var tasks = new List<WorkingTask>();
         foreach (var state in observed)
@@ -118,7 +116,8 @@ internal sealed class AgentActivityMonitor
             {
                 tasks.Add(new WorkingTask(state.ThreadId, state.WorkingDirectory,
                     includeProjectColors ? _projectColors.Resolve(state.ThreadId, state.WorkingDirectory) : null,
-                    includeProjectColors ? _projectColors.ResolveMarker(state.ThreadId, state.WorkingDirectory) : null));
+                    includeProjectColors ? _projectColors.ResolveMarker(state.ThreadId, state.WorkingDirectory) : null,
+                    _projectColors.ResolveName(state.ThreadId, state.WorkingDirectory), state.StartedAt));
             }
         }
 
@@ -155,6 +154,7 @@ internal sealed class AgentActivityMonitor
     internal sealed class ActivityState(string threadId, DateTimeOffset? questionBaseline = null)
     {
         internal string ThreadId => threadId;
+        internal DateTimeOffset? StartedAt => _startedAt;
         private long _offset;
         private string? _turnId;
         private DateTimeOffset? _startedAt;

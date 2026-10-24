@@ -15,6 +15,9 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- Per-task hover tooltips with the project name and live elapsed turn time:
+  seconds below one minute, minutes and seconds through five minutes, and whole
+  minutes above five minutes, independently of colors, badges, and animation.
 - Separate question sounds for new structured Codex prompts, with six Hmm/Huh
   voice clips, previews, a separately saved custom WAV, and a silent default.
   Removed bundled selections fall back to None; existing custom WAV files and

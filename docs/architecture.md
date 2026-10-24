@@ -75,26 +75,37 @@ slot order on the left, keeping the first icon nearest the battery controls.
 The battery group stays anchored during activity resizing where taskbar bounds
 permit it. Left-side icon positions account for rounded physical strip widths,
 so new icons do not shift existing ones by a fraction of a pixel. Display mode
-is persisted and defaults to icon/count.
+is persisted and defaults to one icon per task.
 Repeated icons can share one animation phase or use an index-based phase offset.
 The synchronization preference applies immediately and is persisted, defaulting
 to the existing staggered timing.
 
 `ReadTasks` retains stable thread IDs and working directories alongside each
-main task's optional project color. The monitor preserves the order of tasks
+main task's project name, recorded turn start, and optional project color.
+The monitor preserves the order of tasks
 already working and appends newly active tasks. Their icons grow outward without
 reordering existing icons or changing their animation offsets. Completed tasks
-are removed; a resumed task rejoins at the outer edge. When coloring or badges
-are enabled in repeated-icon mode, `ProjectColorReader`
+are removed; a resumed task rejoins at the outer edge. `ProjectColorReader`
 reads `.codex-global-state.json` with shared read access and caches only the
-project-color/marker/assignment metadata. File timestamp and length changes trigger
+project-name/color/marker/assignment metadata. File timestamp and length changes trigger
 reloads; partial writes preserve the last valid mapping. Explicit project
 assignments win over workspace hints and the longest unambiguous root match.
 Projectless or unmatched tasks and unsupported/default colors use the normal
-icon accent. Palette tokens use the desktop dark-sidebar RGB values. No desktop
-state is needed for project appearance while both options are off or in
-icon-and-number mode; factory-controller matching can still read it in those
-modes. No Codex settings or state files are written.
+icon accent. Palette tokens use the desktop dark-sidebar RGB values. Project
+names are resolved independently of colors, badges, and display mode. Names
+follow canonical/legacy project IDs and explicit assignments, including tasks in
+worktrees. Missing names fall back to project root or workspace folder names;
+explicitly projectless tasks show No project. No Codex settings or state files
+are written.
+
+Repeated-icon tooltips share the session-navigation hit test, including project
+badges and left-side slot reversal. Each tooltip shows the project name and
+current turn runtime: seconds below one minute, minutes and seconds through five
+minutes, and whole minutes above five minutes. A separate one-second UI timer
+refreshes hover text even with animation disabled. Same-count activity updates
+refresh names and starts without forcing a repaint. Battery and aggregate-mode
+hovering retain the usage tooltip. Elapsed time uses the recorded UTC turn start,
+includes tool/input waits, survives app restarts, and resets for a new turn.
 
 Project markers travel alongside the color in `WorkingTask`. The independent
 `Show project icon` preference draws a stationary badge at the upper-right of

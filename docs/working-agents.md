@@ -108,6 +108,18 @@ With two in-progress main tasks, **Icon and number** shows one icon followed by 
 number. Each icon represents one main task, rather than its progress or
 remaining work.
 
+Hover over a task icon or its project badge to see its project name and elapsed
+time for the current turn. The tooltip updates each second, including with icon
+animation disabled: `42s` below one minute, `2m 15s` from one through five
+minutes, and whole minutes such as `6m` once the runtime exceeds five minutes.
+Runtime includes time waiting on tools or input and resets for each new turn.
+Names follow the assigned project, including worktrees, independently of project
+colors and badges. Without desktop metadata, the workspace folder name is used;
+projectless tasks show **No project**. Hovering the usage batteries retains the
+usage tooltip.
+
+![Static tooltip examples using a synthetic project](images/task-tooltips-gallery.png)
+
 In **One icon per task** mode, left-click a task icon or its project badge to
 bring Codex Desktop forward and select that session. This requires Codex Desktop
 with its registered `codex://` link handler. The session must be available in
@@ -139,7 +151,7 @@ color updates its running icons on the next activity check. Synchronization
 still controls animation timing independently of color.
 
 Icons keep their task/color association on either side of the battery group.
-The option is saved, starts off, and is unavailable in icon-and-number mode.
+The option is saved, starts on, and is unavailable in icon-and-number mode.
 Switching back to icon-and-number mode leaves the single icon its usual blue.
 
 A task's explicit project assignment takes priority, including when it runs in
@@ -230,10 +242,10 @@ names, locking, or event format can affect detection independently of quota
 display. Remote/cloud-only work, ephemeral sessions, and other sessions without
 the required local files are not covered.
 
-When project coloring or project badges are enabled in repeated-icon mode, or a
-factory worker needs to be matched to its controller, CodexTray also reads
+To resolve project names for tooltips, colors, badges, and factory worker
+matching, CodexTray also reads
 `.codex-global-state.json` from the same Codex home directory. It interprets
-project colors and markers, task-project assignments, project-ID aliases, workspace
+project names, colors and markers, task-project assignments, project-ID aliases, workspace
 hints, and local project roots. The desktop state file is not modified. Its
 format is also an implementation detail; incompatible or unavailable color
 metadata falls back to blue. Codex CLI-only installations can still show the

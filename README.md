@@ -35,6 +35,7 @@ use unreleased features; check the changelog when using a release archive.
 - Working-agent icons use a fixed, large size for readability
 - Icon and number, or one spaced icon per running main task, expanding outward
 - Click a repeated task icon to bring Codex Desktop forward to that session
+- Hover a task icon to see its project name and elapsed turn time
 - Optional project colors for repeated task icons, matching Codex Desktop's palette
 - Switchable project icon badges at the upper-right of repeated loading icons
 - One widget on every connected display
@@ -135,6 +136,14 @@ The indicator is enabled by default and appears when a compatible local Codex
 session has an in-progress turn. Nothing is shown at zero; this is normal when
 Codex is idle. Open **Display → Working agents** to change its appearance.
 
+In **One icon per task** mode, hover an icon or its project badge to see the
+project name and current turn runtime: `42s` below one minute, `2m 15s` through
+five minutes, and whole minutes such as `6m` above five minutes. The tooltip
+updates while hovering even with animation disabled. Runtime includes tool and
+input waits and resets for each new turn. Worktrees use the assigned project
+name; CLI workspaces fall back to the folder name and projectless tasks show
+**No project**.
+
 ![Working-agent loading icon choices](docs/images/working-agents-gallery.png)
 
 The activity indicator shows an icon and the number of in-progress main Codex
@@ -223,10 +232,12 @@ versions; no minimum compatible Codex version has been established. If the files
 are missing or incompatible, an absent indicator does not prove all agents are idle.
 The monitor reads locally on a background thread and sends no model requests.
 Animation runs only while a visible widget has a nonzero count.
-Project coloring and factory-controller matching additionally read Codex Desktop's
-local `.codex-global-state.json`. It uses task-project assignments, workspace hints,
-and project roots. This desktop state format can change too; unavailable mappings
-fall back to the normal blue and keep standalone factory workers visible.
+Project names, coloring, badges, and factory-controller matching additionally
+read Codex Desktop's local `.codex-global-state.json`. It uses task-project
+assignments, workspace hints, and project roots. Project names are resolved even
+with colors and badges off. This desktop state format can change too;
+unavailable mappings use workspace folder names and the normal blue and keep
+standalone factory workers visible.
 
 CodexTray checks `CODEXTRAY_CODEX_PATH`, then `PATH`, then the Codex Desktop
 installation below `%LOCALAPPDATA%\OpenAI\Codex\bin`.
@@ -261,7 +272,7 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - Agent activity reads local Codex session logs, which can contain conversation
   content, to inspect session metadata and turn lifecycle events. CodexTray does
   not upload, save, or log that content, and does not change session-file contents.
-- Project coloring, badges, and factory-controller matching read local desktop
+- Project names, coloring, badges, and factory-controller matching read local desktop
   project metadata. It does not modify Codex's state or project settings.
 - Project badges read named vector shapes from the installed desktop app's local
   archive without executing its JavaScript. Those assets are not bundled here.

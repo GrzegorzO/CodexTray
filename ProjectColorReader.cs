@@ -41,6 +41,7 @@ internal sealed class ProjectColorReader(string home)
 
     internal Color? Resolve(string threadId, string? workingDirectory) => _map.Resolve(threadId, workingDirectory);
     internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory) => _map.ResolveMarker(threadId, workingDirectory);
+    internal string? ResolveName(string threadId, string? workingDirectory) => _map.ResolveName(threadId, workingDirectory);
     internal bool IsInProject(string threadId, string? workingDirectory, string projectDirectory) =>
         _map.IsInProject(threadId, workingDirectory, projectDirectory);
 }
@@ -48,6 +49,7 @@ internal sealed class ProjectColorReader(string home)
 internal sealed class ProjectColorMap
 {
     private readonly Dictionary<string, Color> _colors = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _names = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProjectMarker> _markers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _assignments = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _legacyIds = new(StringComparer.Ordinal);
@@ -97,6 +99,10 @@ internal sealed class ProjectColorMap
         }
         foreach (var project in Properties(state, "local-projects"))
         {
+            if (StringProperty(project.Value, "name") is { } name && !string.IsNullOrWhiteSpace(name))
+            {
+                map._names[project.Name] = name.Trim();
+            }
             if (project.Value.ValueKind != JsonValueKind.Object ||
                 !project.Value.TryGetProperty("rootPaths", out var roots) || roots.ValueKind != JsonValueKind.Array)
             {
@@ -107,6 +113,7 @@ internal sealed class ProjectColorMap
                 if (root.ValueKind == JsonValueKind.String && NormalizeDirectory(root.GetString()) is { } directory)
                 {
                     map._roots.Add((directory, project.Name));
+                    map._names.TryAdd(project.Name, Path.GetFileName(directory) is { Length: > 0 } folder ? folder : directory);
                 }
             }
         }
@@ -133,6 +140,19 @@ internal sealed class ProjectColorMap
 
     internal Color? Resolve(string threadId, string? workingDirectory) =>
         ProjectForTask(threadId, workingDirectory) is { } id ? ColorForProject(id) : null;
+
+    internal string? ResolveName(string threadId, string? workingDirectory)
+    {
+        if (_projectless.Contains(threadId)) { return null; }
+        if (ProjectForTask(threadId, workingDirectory) is { } id)
+        {
+            if (_names.TryGetValue(id, out var name)) { return name; }
+            if (_legacyIds.TryGetValue(id, out var legacy) && _names.TryGetValue(legacy, out name)) { return name; }
+        }
+        // CLI tasks can have a workspace without any desktop project metadata.
+        var directory = NormalizeDirectory(workingDirectory);
+        return directory is null ? null : Path.GetFileName(directory) is { Length: > 0 } folder ? folder : directory;
+    }
 
     internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory)
     {

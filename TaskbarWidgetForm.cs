@@ -60,6 +60,7 @@ internal sealed class TaskbarWidgetForm : Form
     private readonly ToolTip _tooltip = new();
     private readonly System.Windows.Forms.Timer _countdownTimer;
     private readonly System.Windows.Forms.Timer _animationTimer;
+    private readonly System.Windows.Forms.Timer _tooltipTimer;
     private readonly Screen _targetScreen;
     private bool _mousePressed;
     private bool _dragging;
@@ -71,7 +72,8 @@ internal sealed class TaskbarWidgetForm : Form
     private string? _errorMessage;
     private (string FiveHour, string Weekly)? _lastCountdownLabels;
     private int _workingAgentCount;
-    private string[] _taskThreadIds = [];
+    private WorkingTask[] _workingTasks = [];
+    private Point? _hoverPoint;
     private Color?[] _taskColors = [];
     private ProjectMarker?[] _taskMarkers = [];
 
@@ -142,6 +144,11 @@ internal sealed class TaskbarWidgetForm : Form
 
         MouseDown += OnDragStart;
         MouseMove += OnDragMove;
+        MouseLeave += (_, _) =>
+        {
+            _hoverPoint = null;
+            UpdateTooltip();
+        };
         MouseUp += OnDragEnd;
         MouseCaptureChanged += (_, _) =>
         {
@@ -167,6 +174,8 @@ internal sealed class TaskbarWidgetForm : Form
         // Color-key layered windows need a complete buffered frame. Partial
         // presents can expose an empty surface while another monitor plays video.
         _animationTimer.Tick += (_, _) => InvalidateAnimationFrame();
+        _tooltipTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _tooltipTimer.Tick += (_, _) => UpdateTooltip();
     }
 
     internal void InvalidateAnimationFrame() => Invalidate();
@@ -174,14 +183,14 @@ internal sealed class TaskbarWidgetForm : Form
     internal void SetWorkingAgentCount(int count)
     {
         count = Math.Max(0, count);
-        if (_workingAgentCount == count && _taskColors.Length == 0 && _taskThreadIds.Length == 0)
+        if (_workingAgentCount == count && _taskColors.Length == 0 && _workingTasks.Length == 0)
         {
             return;
         }
 
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         _workingAgentCount = count;
-        _taskThreadIds = [];
+        _workingTasks = [];
         _taskColors = [];
         _taskMarkers = [];
         UpdateAgentPresentation(previousLeftInset);
@@ -189,12 +198,13 @@ internal sealed class TaskbarWidgetForm : Form
 
     internal void SetWorkingTasks(IReadOnlyList<WorkingTask> tasks)
     {
-        // Identity can change while count, colors, and markers stay the same.
-        _taskThreadIds = tasks.Select(task => task.ThreadId).ToArray();
+        // Identity, project name, and turn start can change without a visual change.
+        _workingTasks = tasks.ToArray();
         var colors = tasks.Select(task => task.ProjectColor).ToArray();
         var markers = tasks.Select(task => task.ProjectMarker).ToArray();
         if (_workingAgentCount == tasks.Count && _taskColors.SequenceEqual(colors) && _taskMarkers.SequenceEqual(markers))
         {
+            UpdateTooltip();
             return;
         }
         var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
@@ -269,6 +279,18 @@ internal sealed class TaskbarWidgetForm : Form
 
     private void UpdateTooltip()
     {
+        var task = _hoverPoint is { } point ? WorkingTaskAt(point) : null;
+        _tooltipTimer.Enabled = task is not null;
+        var text = task is null ? GeneralTooltip() : task.ToTooltip(DateTimeOffset.UtcNow);
+        if (_tooltip.GetToolTip(this) != text)
+        {
+            _tooltip.SetToolTip(this, text);
+        }
+        AccessibleName = text;
+    }
+
+    private string GeneralTooltip()
+    {
         var text = _isError ? $"Codex usage error: {_errorMessage}" : _snapshot?.ToTooltip() ?? "Codex usage is still loading.";
         if (AgentCounterWidth > 0)
         {
@@ -279,8 +301,7 @@ internal sealed class TaskbarWidgetForm : Form
             }
         }
 
-        _tooltip.SetToolTip(this, text);
-        AccessibleName = text;
+        return text;
     }
 
     private void UpdateAnimation() => _animationTimer.Enabled = Visible && AgentCounterWidth > 0 && AnimateAgentCounter;
@@ -738,6 +759,8 @@ internal sealed class TaskbarWidgetForm : Form
             _countdownTimer.Dispose();
             _animationTimer.Stop();
             _animationTimer.Dispose();
+            _tooltipTimer.Stop();
+            _tooltipTimer.Dispose();
             _tooltip.Dispose();
         }
 
@@ -1181,6 +1204,8 @@ internal sealed class TaskbarWidgetForm : Form
 
     private void OnDragMove(object? sender, MouseEventArgs eventArgs)
     {
+        _hoverPoint = eventArgs.Location;
+        UpdateTooltip();
         Cursor = WorkingThreadAt(eventArgs.Location) is null ? Cursors.Default : Cursors.Hand;
         if (!_mousePressed)
         {
@@ -1240,14 +1265,16 @@ internal sealed class TaskbarWidgetForm : Form
         }
     }
 
-    internal string? WorkingThreadAt(Point point)
+    internal string? WorkingThreadAt(Point point) => WorkingTaskAt(point)?.ThreadId;
+
+    private WorkingTask? WorkingTaskAt(Point point)
     {
         if (AgentCounterMode != AgentIndicatorMode.RepeatedIcons || !AgentCounterBounds.Contains(point))
         {
             return null;
         }
         var index = AgentIndicatorRenderer.TaskIndexAt(point, AgentCounterBounds, _workingAgentCount, AgentCounterSide);
-        return index >= 0 && index < _taskThreadIds.Length ? _taskThreadIds[index] : null;
+        return index >= 0 && index < _workingTasks.Length ? _workingTasks[index] : null;
     }
 
     private int ScaleLogical(int value) => (int)Math.Round(value * DeviceDpi / 96d);
