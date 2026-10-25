@@ -50,6 +50,7 @@ internal static class ScreenshotExporter
             RenderProjectColorGallery(outputDirectory, snapshot);
             RenderProjectColorGallery(outputDirectory, snapshot, showProjectIcons: true);
             RenderTaskTooltipGallery(outputDirectory, snapshot);
+            RenderFinishedAgentGallery(outputDirectory, snapshot);
             return 0;
         }
         catch (Exception exception)
@@ -57,6 +58,44 @@ internal static class ScreenshotExporter
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void RenderFinishedAgentGallery(string outputDirectory, UsageSnapshot snapshot)
+    {
+        using var gallery = new Bitmap(840, 730);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var titleFont = new Font("Segoe UI", 12, FontStyle.Bold);
+        using var captionFont = new Font("Segoe UI", 9);
+        using var text = new SolidBrush(Color.White);
+        graphics.DrawString("Finished agents · static synthetic previews", titleFont, text, 18, 12);
+        graphics.DrawString("Green: working frame · purple: finished at 40% opacity · last example: both finished", captionFont, text, 18, 40);
+        var styles = Enum.GetValues<LoadingIconStyle>();
+        for (var index = 0; index <= styles.Length; index++)
+        {
+            var allFinished = index == styles.Length;
+            var style = allFinished ? LoadingIconStyle.Robot : styles[index];
+            var side = index % 2 == 0 ? AgentIndicatorPosition.Right : AgentIndicatorPosition.Left;
+            var card = new Rectangle(12 + index % 2 * 414, 70 + index / 2 * 108, 402, 100);
+            using var background = new SolidBrush(TaskbarColor);
+            graphics.FillRectangle(background, card);
+            graphics.DrawString(allFinished ? "All finished · animation timer stopped" :
+                $"{AgentIndicatorRenderer.Title(style)} · {side.ToString().ToLowerInvariant()}", captionFont, text, card.X + 12, card.Y + 8);
+            using var menu = new ContextMenuStrip();
+            using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+            widget.ApplyDisplaySettings(DisplayStyle.Classic, true, true, LabelContentMode.Static, LabelPosition.Right, PercentagePosition.Center);
+            widget.ApplyAgentSettings(true, false, style, side, AgentIndicatorMode.RepeatedIcons,
+                useProjectColors: true, showProjectIcons: true);
+            widget.SetSnapshot(snapshot);
+            var finished = new WorkingTask("sample-finished", null, ProjectColorMap.ParseColor("purple"), new ProjectMarker("code-brackets"),
+                "Example project", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch.AddMinutes(2));
+            widget.SetWorkingTasks([
+                finished with { ThreadId = "sample-first", ProjectColor = ProjectColorMap.ParseColor("green"),
+                    ProjectMarker = new ProjectMarker("code-brackets"), FinishedAt = allFinished ? finished.FinishedAt : null }, finished]);
+            using var preview = widget.RenderPreview(TaskbarColor, 1.6f);
+            graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 34);
+        }
+        gallery.Save(Path.Combine(outputDirectory, "finished-agents-gallery.png"), ImageFormat.Png);
     }
 
     private static void RenderTaskTooltipGallery(string outputDirectory, UsageSnapshot snapshot)

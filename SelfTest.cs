@@ -26,6 +26,7 @@ internal static class SelfTest
             VerifyAgentPresentationPaint();
             VerifyWorkingTaskNavigation();
             VerifyWorkingTaskTooltip();
+            VerifyFinishedTasks();
             using var document = JsonDocument.Parse("""
                 {
                   "rateLimits": {},
@@ -240,11 +241,15 @@ internal static class SelfTest
             var monitor = new AgentActivityMonitor(home);
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "live writer with active turn counts once");
             Assert(monitor.StoppedLifetimes.Count == 0, "initial activity scan never notifies");
+            Assert(monitor.StoppedTasks.Count == 0, "initial history does not create finished icons");
             File.AppendAllText(rollout, """{"type":"event_msg","payload":{"type":"task_complete","turn_id":"live"}}""" + "\n");
             Assert(monitor.ReadCount(CancellationToken.None) == 0, "loaded idle thread does not count");
             Assert(monitor.StoppedLifetimes.Count == 1, "main-task completion produces one sound candidate");
+            Assert(monitor.StoppedTasks.Single() is { ThreadId: id, StartedAt: not null, FinishedAt: not null },
+                "observed completion supplies a navigable finished task");
             monitor.ReadCount(CancellationToken.None);
             Assert(monitor.StoppedLifetimes.Count == 0, "completion is not repeated on later polls");
+            Assert(monitor.StoppedTasks.Count == 0, "finished transition is emitted once");
             File.AppendAllText(rollout, """{"type":"event_msg","payload":{"type":"task_started","turn_id":"crash"}}""" + "\n");
             Assert(monitor.ReadCount(CancellationToken.None) == 1, "next active turn counts");
             writer.Unlock(0, 1);
@@ -1078,6 +1083,128 @@ internal static class SelfTest
                             $"{side} {mode} animation={animate} count={count} paints a complete frame before returning");
                     }
                 }
+    }
+
+    private static void VerifyFinishedTasks()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        var first = new WorkingTask("first", null, ProjectName: "Example", StartedAt: start);
+        var second = first with { ThreadId = "second" };
+        var finished = first with { FinishedAt = start.AddSeconds(42) };
+        var tracker = new FinishedTaskTracker();
+        var missing = new Dictionary<string, HashSet<string>>();
+        var unread = new Dictionary<string, HashSet<string>> { ["fixture/local:fixture"] = ["first"] };
+        var read = new Dictionary<string, HashSet<string>> { ["fixture/local:fixture"] = [] };
+        tracker.Update([first, second], [], missing);
+        tracker.Update([second], [finished], missing);
+        Assert(tracker.Tasks.SequenceEqual([finished, second]), "completion retains the icon's original position");
+        Assert(finished.ToTooltip(start.AddHours(1)) == "Example · Finished · 42s", "finished tooltips freeze the turn runtime");
+        tracker.Update([second], [], unread);
+        tracker.Update([second], [], missing);
+        Assert(tracker.Tasks.Count == 2, "missing read state cannot dismiss a finished icon");
+        tracker.Update([second], [], read);
+        Assert(tracker.Tasks.SequenceEqual([second]), "opening an unread session manually clears its finished icon");
+        tracker.Update([first, second], [], unread);
+        tracker.Update([second], [finished], unread);
+        tracker.Dismiss("second");
+        Assert(tracker.Tasks.Count == 2, "clicking an active task does not hide it");
+        tracker.Dismiss("FIRST");
+        tracker.Update([second], [], unread);
+        Assert(tracker.Tasks.SequenceEqual([second]), "click dismissal is shared and cannot resurrect on the next poll");
+        tracker.Update([], [finished, second with { FinishedAt = start.AddMinutes(1) }], unread);
+        var resumed = first with { StartedAt = start.AddMinutes(2) };
+        tracker.Update([resumed], [], unread);
+        Assert(tracker.Tasks.Count == 2 && tracker.Tasks[^1] == resumed && tracker.Tasks[0].ThreadId == "second",
+            "resuming replaces a finished icon with one active icon at the outer edge");
+        tracker.Update([resumed], [finished], unread);
+        Assert(tracker.Tasks.Count == 2 && tracker.Tasks[^1] == resumed,
+            "a completion and restart in the same poll do not leave a duplicate");
+        tracker.Update([resumed], [], read);
+        Assert(tracker.Tasks.Any(task => task == resumed), "read-state changes never hide a running task");
+        var rapidRestart = resumed with { StartedAt = start.AddMinutes(3) };
+        tracker.Update([resumed, second], [], missing);
+        tracker.Update([rapidRestart, second], [finished], missing);
+        Assert(tracker.Tasks[^1] == rapidRestart && tracker.Tasks.Count(task => task.ThreadId == "first") == 1,
+            "a restart between polls still joins the outer edge once");
+
+        using var state = JsonDocument.Parse("""
+            {"electron-thread-read-state-v1":{"version":1,"unreadByIdentity":{
+              "fixture":{"local:fixture":["first"],"remote:fixture":["second"]}}}}
+            """);
+        var parsed = FinishedTaskTracker.ParseReadState(state.RootElement);
+        Assert(parsed.Count == 1 && parsed.Single().Value.SetEquals(["first"]), "only local unread IDs are interpreted");
+        using var malformed = JsonDocument.Parse("""{"electron-thread-read-state-v1":{"version":"1"}}""");
+        Assert(FinishedTaskTracker.ParseReadState(malformed.RootElement).Count == 0, "unsupported read-state metadata is ignored");
+        var fixtureHome = Path.Combine(Path.GetTempPath(), $"CodexTray-read-state-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(fixtureHome);
+        var fixturePath = Path.Combine(fixtureHome, ".codex-global-state.json");
+        try
+        {
+            File.WriteAllText(fixturePath, state.RootElement.GetRawText());
+            var reader = new ProjectColorReader(fixtureHome);
+            reader.Refresh();
+            Assert(reader.ReadState.Single().Value.SetEquals(["first"]), "the shared desktop reader loads unread flags");
+            File.WriteAllText(fixturePath, "{");
+            reader.Refresh();
+            Assert(reader.ReadState.Single().Value.SetEquals(["first"]), "partial desktop writes preserve unread state");
+            File.WriteAllText(fixturePath, """{"electron-thread-read-state-v1":{"version":1,"unreadByIdentity":{"fixture":{"local:fixture":[]}}}}""");
+            reader.Refresh();
+            Assert(reader.ReadState.Single().Value.Count == 0, "a later valid write exposes the read transition");
+        }
+        finally
+        {
+            File.Delete(fixturePath);
+            Directory.Delete(fixtureHome);
+        }
+
+        using var menu = new ContextMenuStrip();
+        using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+        {
+            widget.ApplyAgentSettings(true, true, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons);
+            widget.SetWorkingTasks([finished]);
+            Assert(widget.AgentCounterWidth == AgentIndicatorRenderer.WidthFor(1, AgentIndicatorMode.RepeatedIcons),
+                "finished-only repeated mode retains its slot");
+            var point = new Point(widget.AgentCounterBounds.Left +
+                (int)((AgentIndicatorRenderer.IconXFor(0, 1, side) + 8) * AgentIndicatorRenderer.Scale), widget.Height / 2);
+            Assert(widget.WorkingThreadAt(point) == "first", "finished icons remain navigable on either side");
+            widget.Visible = true;
+            var timer = (System.Windows.Forms.Timer)typeof(TaskbarWidgetForm).GetField("_animationTimer",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(widget)!;
+            Assert(!timer.Enabled, "finished-only widgets stop their animation timer");
+            widget.SetWorkingTasks([finished, second]);
+            Assert(timer.Enabled, "mixed widgets animate their active task");
+            widget.Visible = false;
+            widget.SetWorkingTasks([finished]);
+            widget.ApplyAgentSettings(true, true, LoadingIconStyle.Robot, side, AgentIndicatorMode.IconAndNumber);
+            Assert(widget.AgentCounterWidth == 0, "finished tasks never inflate the aggregate count");
+        }
+        foreach (var style in Enum.GetValues<LoadingIconStyle>())
+            foreach (var dpiScale in new[] { 1f, 1.5f, 2f, 3f })
+            {
+                using var firstFrame = Render(0.1f);
+                using var nextFrame = Render(0.8f);
+                var visible = false;
+                for (var y = 0; y < firstFrame.Height; y++)
+                    for (var x = 0; x < firstFrame.Width; x++)
+                    {
+                        var pixel = firstFrame.GetPixel(x, y);
+                        visible |= pixel.A > 0;
+                        Assert(pixel == nextFrame.GetPixel(x, y), "finished icons and badges stay static in every style and scale");
+                        Assert(pixel.A <= 105, "the complete finished slot is faded, including opaque icon details");
+                    }
+                Assert(visible, "finished icons remain visible");
+
+                Bitmap Render(float phase)
+                {
+                    var bitmap = new Bitmap((int)(60 * dpiScale), (int)(42 * dpiScale));
+                    using var graphics = Graphics.FromImage(bitmap);
+                    graphics.ScaleTransform(dpiScale, dpiScale);
+                    AgentIndicatorRenderer.Draw(graphics, new Rectangle(0, 0, 60, 42), 1, style, phase,
+                        AgentIndicatorMode.RepeatedIcons, projectMarkers: [new ProjectMarker("code-brackets")], finishedTasks: [true]);
+                    return bitmap;
+                }
+            }
     }
 
     private static void VerifyWorkingTaskTooltip()

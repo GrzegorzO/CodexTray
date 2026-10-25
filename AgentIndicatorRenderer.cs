@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 
 namespace CodexTray;
 
@@ -83,7 +84,8 @@ internal static class AgentIndicatorRenderer
     internal static void Draw(Graphics graphics, Rectangle bounds, int count, LoadingIconStyle style, float phase,
         AgentIndicatorMode mode = AgentIndicatorMode.IconAndNumber,
         AgentIndicatorPosition side = AgentIndicatorPosition.Right, bool synchronizeAnimations = false,
-        IReadOnlyList<Color?>? projectColors = null, IReadOnlyList<ProjectMarker?>? projectMarkers = null, bool colorLoadingIcons = true)
+        IReadOnlyList<Color?>? projectColors = null, IReadOnlyList<ProjectMarker?>? projectMarkers = null, bool colorLoadingIcons = true,
+        IReadOnlyList<bool>? finishedTasks = null)
     {
         if (count <= 0)
         {
@@ -99,10 +101,16 @@ internal static class AgentIndicatorRenderer
             {
                 var icon = new RectangleF(IconXFor(index, count, side), -8, 16, 16);
                 var color = projectColors is not null && index < projectColors.Count ? projectColors[index] : null;
+                var marker = projectMarkers is not null && index < projectMarkers.Count ? projectMarkers[index] : null;
+                if (finishedTasks is not null && index < finishedTasks.Count && finishedTasks[index])
+                {
+                    DrawFinishedIcon(graphics, icon, style, colorLoadingIcons ? color : null, marker, color ?? DefaultColor);
+                    continue;
+                }
                 DrawIcon(graphics, icon,
                     style, synchronizeAnimations ? phase : (phase + index * 0.08f) % 1,
                     colorLoadingIcons ? color : null);
-                if (projectMarkers is not null && index < projectMarkers.Count && projectMarkers[index] is { } marker)
+                if (marker is not null)
                 {
                     ProjectMarkerRenderer.Draw(graphics, new RectangleF(icon.Right - 4, icon.Top - 6, 12, 12), marker, color ?? DefaultColor);
                 }
@@ -118,6 +126,34 @@ internal static class AgentIndicatorRenderer
                 new RectangleF(28, -16, BaseWidthFor(count, mode) - 28, 32), format);
         }
         graphics.Restore(state);
+    }
+
+    private static void DrawFinishedIcon(Graphics graphics, RectangleF icon, LoadingIconStyle style,
+        Color? color, ProjectMarker? marker, Color markerColor)
+    {
+        // Fade the whole rendered slot, including white details and the badge.
+        // Render at the target scale to retain sharp vectors on high-DPI surfaces.
+        using var transform = graphics.Transform;
+        var elements = transform.Elements;
+        var scale = MathF.Sqrt(elements[0] * elements[0] + elements[1] * elements[1]);
+        var size = Math.Max(1, (int)Math.Ceiling(40 * scale));
+        using var bitmap = new Bitmap(size, size);
+        using (var layer = Graphics.FromImage(bitmap))
+        {
+            layer.ScaleTransform(size / 40f, size / 40f);
+            DrawIcon(layer, new RectangleF(8, 12, 16, 16), style, 0.25f, color);
+            if (marker is not null)
+            {
+                ProjectMarkerRenderer.Draw(layer, new RectangleF(20, 6, 12, 12), marker, markerColor);
+            }
+        }
+        using var attributes = new ImageAttributes();
+        attributes.SetColorMatrix(new ColorMatrix { Matrix33 = 0.4f });
+        var destination = new PointF[]
+        {
+            new(icon.X - 8, icon.Y - 12), new(icon.X + 32, icon.Y - 12), new(icon.X - 8, icon.Y + 28)
+        };
+        graphics.DrawImage(bitmap, destination, new RectangleF(0, 0, size, size), GraphicsUnit.Pixel, attributes);
     }
 
     private static void DrawIcon(Graphics graphics, RectangleF icon, LoadingIconStyle style, float phase, Color? projectColor = null)

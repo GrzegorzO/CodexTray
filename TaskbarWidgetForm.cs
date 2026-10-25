@@ -76,6 +76,7 @@ internal sealed class TaskbarWidgetForm : Form
     private Point? _hoverPoint;
     private Color?[] _taskColors = [];
     private ProjectMarker?[] _taskMarkers = [];
+    private bool[] _finishedTasks = [];
 
     internal bool ShowAgentCounter { get; private set; } = true;
     internal bool AnimateAgentCounter { get; private set; } = true;
@@ -86,7 +87,9 @@ internal sealed class TaskbarWidgetForm : Form
     internal bool UseProjectColors { get; private set; }
     internal bool ShowProjectIcons { get; private set; }
     internal int AgentCounterWidth => ShowAgentCounter
-        ? AgentIndicatorRenderer.WidthFor(_workingAgentCount, AgentCounterMode) : 0;
+        ? AgentIndicatorRenderer.WidthFor(AgentDisplayCount, AgentCounterMode) : 0;
+    private int AgentDisplayCount => AgentCounterMode == AgentIndicatorMode.RepeatedIcons && _workingTasks.Length > 0
+        ? _workingTasks.Length : _workingAgentCount;
     internal Rectangle AgentCounterBounds => new(
         AgentCounterSide == AgentIndicatorPosition.Left ? 0 : ClientSize.Width - AgentCounterWidth,
         0, AgentCounterWidth, ClientSize.Height);
@@ -193,24 +196,29 @@ internal sealed class TaskbarWidgetForm : Form
         _workingTasks = [];
         _taskColors = [];
         _taskMarkers = [];
+        _finishedTasks = [];
         UpdateAgentPresentation(previousLeftInset);
     }
 
     internal void SetWorkingTasks(IReadOnlyList<WorkingTask> tasks)
     {
+        var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
         // Identity, project name, and turn start can change without a visual change.
         _workingTasks = tasks.ToArray();
         var colors = tasks.Select(task => task.ProjectColor).ToArray();
         var markers = tasks.Select(task => task.ProjectMarker).ToArray();
-        if (_workingAgentCount == tasks.Count && _taskColors.SequenceEqual(colors) && _taskMarkers.SequenceEqual(markers))
+        var finished = tasks.Select(task => task.FinishedAt.HasValue).ToArray();
+        var runningCount = tasks.Count(task => !task.FinishedAt.HasValue);
+        if (_workingAgentCount == runningCount && _taskColors.SequenceEqual(colors) && _taskMarkers.SequenceEqual(markers) &&
+            _finishedTasks.SequenceEqual(finished))
         {
             UpdateTooltip();
             return;
         }
-        var previousLeftInset = AgentCounterSide == AgentIndicatorPosition.Left ? AgentCounterWidth : 0;
-        _workingAgentCount = tasks.Count;
+        _workingAgentCount = runningCount;
         _taskColors = colors;
         _taskMarkers = markers;
+        _finishedTasks = finished;
         UpdateAgentPresentation(previousLeftInset);
     }
 
@@ -280,7 +288,7 @@ internal sealed class TaskbarWidgetForm : Form
     private void UpdateTooltip()
     {
         var task = _hoverPoint is { } point ? WorkingTaskAt(point) : null;
-        _tooltipTimer.Enabled = task is not null;
+        _tooltipTimer.Enabled = task is { FinishedAt: null };
         var text = task is null ? GeneralTooltip() : task.ToTooltip(DateTimeOffset.UtcNow);
         if (_tooltip.GetToolTip(this) != text)
         {
@@ -304,7 +312,8 @@ internal sealed class TaskbarWidgetForm : Form
         return text;
     }
 
-    private void UpdateAnimation() => _animationTimer.Enabled = Visible && AgentCounterWidth > 0 && AnimateAgentCounter;
+    private void UpdateAnimation() => _animationTimer.Enabled = Visible && AgentCounterWidth > 0 &&
+        _workingAgentCount > 0 && AnimateAgentCounter;
 
     protected override void OnVisibleChanged(EventArgs eventArgs)
     {
@@ -618,11 +627,11 @@ internal sealed class TaskbarWidgetForm : Form
         {
             var duration = AgentIndicatorRenderer.CycleDuration(AgentIconStyle);
             var phase = AnimateAgentCounter ? (Environment.TickCount64 % duration) / (float)duration : 0.25f;
-            AgentIndicatorRenderer.Draw(graphics, AgentCounterBounds, _workingAgentCount, AgentIconStyle, phase,
+            AgentIndicatorRenderer.Draw(graphics, AgentCounterBounds, AgentDisplayCount, AgentIconStyle, phase,
                 AgentCounterMode, AgentCounterSide, SynchronizeAgentAnimations,
                 (UseProjectColors || ShowProjectIcons) && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskColors : null,
                 ShowProjectIcons && AgentCounterMode == AgentIndicatorMode.RepeatedIcons ? _taskMarkers : null,
-                colorLoadingIcons: UseProjectColors);
+                colorLoadingIcons: UseProjectColors, finishedTasks: _finishedTasks);
         }
     }
 
@@ -1273,7 +1282,7 @@ internal sealed class TaskbarWidgetForm : Form
         {
             return null;
         }
-        var index = AgentIndicatorRenderer.TaskIndexAt(point, AgentCounterBounds, _workingAgentCount, AgentCounterSide);
+        var index = AgentIndicatorRenderer.TaskIndexAt(point, AgentCounterBounds, AgentDisplayCount, AgentCounterSide);
         return index >= 0 && index < _workingTasks.Length ? _workingTasks[index] : null;
     }
 

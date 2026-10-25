@@ -62,7 +62,9 @@ the existing copy and preferences.
 `AgentIndicatorRenderer` draws eleven native loading styles, including a robot
 head with blinking eyes, a glowing antenna, and a gentle bob over a slower
 3.6-second cycle. Widgets reserve a separate strip at the selected outer edge
-and collapse it completely at zero. The animation timer invalidates the complete
+and collapse it completely when there are no displayed slots. Aggregate mode
+counts only running tasks; repeated mode also reserves retained finished slots.
+The animation timer invalidates the complete
 buffered window while visible and active; the reduced-motion setting draws a
 static frame. Activity layout changes synchronously paint a complete buffered
 frame after resizing so newly exposed space is transparent immediately, even
@@ -85,10 +87,26 @@ main task's project name, recorded turn start, and optional project color.
 The monitor preserves the order of tasks
 already working and appends newly active tasks. Their icons grow outward without
 reordering existing icons or changing their animation offsets. Completed tasks
-are removed; a resumed task rejoins at the outer edge. `ProjectColorReader`
-reads `.codex-global-state.json` with shared read access and caches only the
-project-name/color/marker/assignment metadata. File timestamp and length changes trigger
-reloads; partial writes preserve the last valid mapping. Explicit project
+become static shortcuts at 40% opacity, with a frozen runtime and a Finished
+tooltip; a resumed task replaces its old shortcut at the outer edge.
+`FinishedTaskTracker` maintains the shared in-memory slots on the UI thread.
+The monitor supplies incremental stopped-task snapshots independently of sound
+qualification; initial/truncated history is excluded. Temporary read failures
+and factory visibility changes do not manufacture completions. Successful
+navigation dismisses only finished slots across all monitors. Hidden counters
+and mode switches retain the slots; exiting clears them.
+`ProjectColorReader` also parses version-1 desktop unread state for local hosts.
+The tracker dismisses a finished slot only after observing its unread flag clear
+within a still-present identity/host scope. Missing or unsupported data and
+removed scopes do not acknowledge tasks; transitions between polls may be missed.
+No read-state writes or credential reads are involved. Finished slots render a
+fixed frame and badge into a transparent layer at the target scale before
+applying opacity to the whole layer, including white details. Finished-only
+widgets stop the animation timer. `ProjectColorReader`
+reads `.codex-global-state.json` with shared read access and caches project
+names, colors, markers, assignments, roots, hints, and local unread-ID sets.
+File timestamp and length changes trigger reloads; partial writes preserve the
+last valid mapping. Explicit project
 assignments win over workspace hints and the longest unambiguous root match.
 Projectless or unmatched tasks and unsupported/default colors use the normal
 icon accent. Palette tokens use the desktop dark-sidebar RGB values. Project

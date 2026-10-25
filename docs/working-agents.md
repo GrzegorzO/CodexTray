@@ -2,8 +2,9 @@
 
 CodexTray can show how many local main Codex tasks have an in-progress turn.
 Subagents and background helpers are excluded. The indicator sits beside the
-usage batteries and disappears completely when the count reaches zero,
-including the space it occupied.
+usage batteries. **Icon and number** disappears completely at zero. **One icon
+per task** keeps faded finished shortcuts until acknowledged, then releases the
+space when no running or finished icons remain.
 Copied parent history in a subagent log does not create an additional main-task
 icon. Separate user-created chat forks still count as independent tasks.
 
@@ -19,8 +20,8 @@ options in an older release archive.
    open **Display → Working agents**.
 4. Leave **Show counter when working** enabled and choose the appearance you want.
 
-The setting is enabled by default. When idle, use the notification-area icon to
-access Settings even though the activity indicator itself is absent.
+The setting is enabled by default. When there are no running or retained finished
+icons, use the notification-area icon to access Settings.
 
 ## Settings and defaults
 
@@ -30,10 +31,10 @@ immediately to widgets on all monitors and are saved under
 
 | Setting | Default | Behavior |
 | --- | --- | --- |
-| Show counter when working | On | Show activity when the count is nonzero. Turning it off hides the activity indicator. |
+| Show counter when working | On | Show running activity and, in repeated mode, retained finished shortcuts. Turning it off hides the activity indicator. |
 | Loading icon style | Robot head | Choose from eleven styles, listed below. |
 | Counter position | Right of all controls | Place the indicator outside the full battery, label, and percentage group. Left is also available. |
-| Display mode | One icon per task | Show one icon per working task, or choose **Icon and number** for a single icon and count. |
+| Display mode | One icon per task | Show one icon per task, retaining faded finished shortcuts, or choose **Icon and number** for a running-task count. |
 | Animate loading icon | On | Animate the selected style. Turn off for a static frame. |
 | Synchronize icon animations | Off | Repeated icons use staggered timing by default. Turn on to put them in the same animation frame. |
 | Use project colors | On | Available in **One icon per task** mode. Color each icon using its task's Codex project color. |
@@ -46,8 +47,8 @@ Working-agent icons, numbers, and spacing always use the former Large size (130%
 of the original). There is no size setting; earlier Small/Normal preferences are
 ignored. The batteries keep their existing size.
 
-The indicator remains vertically centered. Idle hiding is always
-applied; there is no visible zero-state icon or reserved gap.
+The indicator remains vertically centered. There is no visible zero-state icon
+or reserved gap once all running and retained finished icons are gone.
 
 ### Completion sounds
 
@@ -108,6 +109,29 @@ With two in-progress main tasks, **Icon and number** shows one icon followed by 
 number. Each icon represents one main task, rather than its progress or
 remaining work.
 
+When an observed main turn completes, is interrupted, or releases its writer
+lock, its repeated icon stays in the same slot as a static frame at 40% opacity.
+Its project badge fades too. Hover text shows **Finished** and the frozen turn
+runtime. A finished-only strip stops its animation timer. The running count and
+**Icon and number** mode exclude finished icons.
+
+A successful click opens the session through Codex's existing link handler and
+dismisses the finished shortcut across all monitors. Opening the chat directly
+in Codex clears it when CodexTray observes a local unread-to-read transition.
+Starting another turn in the same session removes the old shortcut and adds
+the active icon at the outer edge, without duplicates. Dragging does not dismiss
+or open it. Hidden counters and mode switches retain these in-memory shortcuts;
+restarting CodexTray clears them. Historical completions found at startup or
+after truncation do not create shortcuts. Sounds keep their independent settings.
+
+Manual-open detection reads `electron-thread-read-state-v1` local unread flags
+in `.codex-global-state.json`. Missing/unsupported metadata, partial writes, or
+removed identity/host buckets do not dismiss shortcuts. A read transition that
+happens entirely between polls may be missed; clicking the shortcut still works.
+CodexTray never writes or marks a chat read in Codex's state files.
+
+![Static synthetic previews of working and finished icons in all styles](images/finished-agents-gallery.png)
+
 Hover over a task icon or its project badge to see its project name and elapsed
 time for the current turn. The tooltip updates each second, including with icon
 animation disabled: `42s` below one minute, `2m 15s` from one through five
@@ -131,9 +155,8 @@ Additional icons extend outward from the battery group: rightward when the
 indicator is on the right and leftward when it is on the left. Existing battery
 and task icons keep their positions when new tasks appear, subject to available
 taskbar space. Newly active tasks join the outer edge, including resumed tasks;
-completed icons are removed while the remaining task order is preserved. The
-widget shifts when needed to
-fit within the available taskbar area.
+finished icons remain faded in place while the remaining task order is preserved.
+The widget shifts when needed to fit within the available taskbar area.
 
 Synchronization changes animation timing only. With synchronization on, robot
 heads blink and bob together, and other styles share the same animation phase.
@@ -257,21 +280,22 @@ Desktop installation. These assets are not bundled with CodexTray.
 Session logs can contain prompts, responses, and tool output. CodexTray reads
 the files to interpret session type, parent links, lifecycle event types, turn
 IDs, and structured factory dispatch headers in user messages. It keeps paths,
-read offsets, and current turn state in memory; it does
-not save, upload, or log conversation content, change session contents, or read
-credential files.
+read offsets, current turn state, finished shortcuts, and local unread flags in
+memory; it does not save, upload, or log conversation content, change session
+contents, or read credential files.
 Activity checks do not start a model request or consume Codex tokens.
 
 ## Troubleshooting
 
 | Symptom | What to check |
 | --- | --- |
-| No indicator while Codex is idle | Expected: it appears only for a nonzero detected count. |
+| No indicator while Codex is idle | Expected when there are no retained finished shortcuts, or when Icon and number has a zero running count. |
+| A faded icon remains after opening its chat | Manual dismissal needs an observed local unread-to-read transition. Missing metadata or transitions between polls can prevent detection; click the icon to open and dismiss it. |
 | No indicator while a local task is running | Confirm the build includes this feature, **Show counter when working** is on, and CodexTray and Codex use the same `CODEX_HOME`. The session must have compatible local logs and writer locks. Missing indicators can mean unsupported activity, rather than zero activity. |
 | A task waiting for approval still appears | Expected: its turn is still in progress. The count clears after completion, interruption, or release of its writer lock. |
 | The count is higher than the number of chats being watched | Check for other local main tasks, including separate CLI sessions or manually forked main chats. Subagents and background helpers are excluded. |
 | Icons do not animate together | Enable **Synchronize icon animations**. It is off by default and only has a visible effect with repeated icons. |
-| Icons are static | Enable **Animate loading icon**. Animation stops while the widget is hidden or idle. |
+| Icons are static | Finished icons are always static. For running tasks, enable **Animate loading icon**. Animation stops while the widget is hidden or has no running tasks. |
 | Use project colors is unavailable | Select **Display mode → One icon per task** first. The option does not apply to the single icon-and-number display. |
 | Show project icon is unavailable | Select **Display mode → One icon per task** first. The switch is independent of Use project colors. |
 | No badge on an otherwise working task icon | Confirm Show project icon is enabled and the task can be matched to a local project. Unmatched and explicitly projectless tasks have no badge. |

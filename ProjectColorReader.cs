@@ -9,6 +9,8 @@ internal sealed class ProjectColorReader(string home)
     private DateTime _lastWrite;
     private long _lastLength = -1;
     private ProjectColorMap _map = new();
+    internal IReadOnlyDictionary<string, HashSet<string>> ReadState { get; private set; } =
+        new Dictionary<string, HashSet<string>>();
 
     internal void Refresh()
     {
@@ -18,6 +20,7 @@ internal sealed class ProjectColorReader(string home)
             if (!file.Exists)
             {
                 _map = new ProjectColorMap();
+                ReadState = new Dictionary<string, HashSet<string>>();
                 _lastLength = -1;
                 return;
             }
@@ -29,6 +32,7 @@ internal sealed class ProjectColorReader(string home)
             using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var document = JsonDocument.Parse(stream);
             _map = ProjectColorMap.Parse(document.RootElement);
+            ReadState = FinishedTaskTracker.ParseReadState(document.RootElement);
             _lastWrite = file.LastWriteTimeUtc;
             _lastLength = file.Length;
         }

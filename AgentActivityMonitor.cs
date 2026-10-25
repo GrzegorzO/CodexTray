@@ -17,6 +17,8 @@ internal sealed class AgentActivityMonitor
 
     internal IReadOnlyList<TimeSpan> StoppedLifetimes => _stoppedLifetimes;
     internal int NewQuestionCount { get; private set; }
+    internal IReadOnlyList<WorkingTask> StoppedTasks { get; private set; } = [];
+    internal IReadOnlyDictionary<string, HashSet<string>> ReadState => _projectColors.ReadState;
 
     public AgentActivityMonitor(string? home = null)
     {
@@ -30,12 +32,14 @@ internal sealed class AgentActivityMonitor
     internal IReadOnlyList<WorkingTask> ReadTasks(CancellationToken cancellationToken, bool includeProjectColors = false)
     {
         _stoppedLifetimes.Clear();
+        StoppedTasks = [];
         NewQuestionCount = 0;
         var lockDirectory = Path.Combine(_home, "thread-writer-locks");
         if (!Directory.Exists(lockDirectory))
         {
             _states.Clear();
             _workingOrder.Clear();
+            _projectColors.Refresh();
             return Array.Empty<WorkingTask>();
         }
 
@@ -99,6 +103,7 @@ internal sealed class AgentActivityMonitor
         _projectColors.Refresh();
         var controllers = observed.Where(state => state.IsWorking && state.IsMainTask && state.FactoryDirectory is null).ToArray();
         var tasks = new List<WorkingTask>();
+        var stoppedTasks = new List<WorkingTask>();
         foreach (var state in observed)
         {
             var hidden = state.FactoryDirectory is { } factory && controllers.Any(controller =>
@@ -106,6 +111,13 @@ internal sealed class AgentActivityMonitor
             if (!hidden && !state.IsHiddenFactoryWorker)
             {
                 _stoppedLifetimes.AddRange(state.StoppedLifetimes);
+                if (state.StoppedLifetimes.Count > 0 && state.LastStoppedStart is { } startedAt)
+                {
+                    stoppedTasks.Add(new WorkingTask(state.ThreadId, state.WorkingDirectory,
+                        includeProjectColors ? _projectColors.Resolve(state.ThreadId, state.WorkingDirectory) : null,
+                        includeProjectColors ? _projectColors.ResolveMarker(state.ThreadId, state.WorkingDirectory) : null,
+                        _projectColors.ResolveName(state.ThreadId, state.WorkingDirectory), startedAt, state.LastStoppedAt));
+                }
             }
             state.IsHiddenFactoryWorker = hidden;
             if (state.IsMainTask && !hidden)
@@ -122,6 +134,7 @@ internal sealed class AgentActivityMonitor
         }
 
         var byId = tasks.ToDictionary(task => task.ThreadId, StringComparer.OrdinalIgnoreCase);
+        StoppedTasks = stoppedTasks;
         _workingOrder.RemoveAll(id => !byId.ContainsKey(id));
         var known = _workingOrder.ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var task in tasks)
@@ -155,6 +168,8 @@ internal sealed class AgentActivityMonitor
     {
         internal string ThreadId => threadId;
         internal DateTimeOffset? StartedAt => _startedAt;
+        internal DateTimeOffset? LastStoppedStart { get; private set; }
+        internal DateTimeOffset? LastStoppedAt { get; private set; }
         private long _offset;
         private string? _turnId;
         private DateTimeOffset? _startedAt;
@@ -231,6 +246,8 @@ internal sealed class AgentActivityMonitor
             if (IsWorking && IsMainTask && _startedAt is { } startedAt)
             {
                 StoppedLifetimes.Add(stoppedAt >= startedAt ? stoppedAt - startedAt : TimeSpan.Zero);
+                LastStoppedStart = startedAt;
+                LastStoppedAt = stoppedAt;
             }
             IsWorking = false;
             _startedAt = null;

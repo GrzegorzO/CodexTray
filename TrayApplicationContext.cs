@@ -36,6 +36,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _visibilityTimer;
     private readonly System.Windows.Forms.Timer _activityTimer;
     private readonly AgentActivityMonitor _activityMonitor = new();
+    private readonly FinishedTaskTracker _finishedTasks = new();
     private readonly AgentCompletionSound _completionSound = new();
     private readonly ToolStripMenuItem _agentCounterItem;
     private readonly ToolStripMenuItem _animateAgentsItem;
@@ -525,8 +526,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _readingActivity = true;
         try
         {
-            var includeColors = (_projectColorsItem.Checked || _projectIconsItem.Checked) &&
-                WidgetSettings.SelectedAgentIndicatorMode == AgentIndicatorMode.RepeatedIcons;
+            // Retained icons need metadata even if their display options are enabled later.
+            const bool includeColors = true;
             var tasks = await Task.Run(() => _activityMonitor.ReadTasks(_shutdown.Token, includeColors), _shutdown.Token);
             if (_shutdown.IsCancellationRequested)
             {
@@ -534,11 +535,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             }
 
             _activityError = null;
-            _workingTasks = tasks;
+            _finishedTasks.Update(tasks, _activityMonitor.StoppedTasks, _activityMonitor.ReadState);
+            _workingTasks = _finishedTasks.Tasks;
             _workingAgentCount = tasks.Count;
             foreach (var widget in _widgets)
             {
-                widget.SetWorkingTasks(tasks);
+                widget.SetWorkingTasks(_workingTasks);
             }
             if (_activityMonitor.NewQuestionCount > 0 && WidgetSettings.SelectedAgentQuestionSound != "None")
             {
@@ -657,6 +659,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try
         {
             CodexSessionLauncher.Open(threadId);
+            _finishedTasks.Dismiss(threadId);
+            _workingTasks = _finishedTasks.Tasks;
+            foreach (var widget in _widgets) { widget.SetWorkingTasks(_workingTasks); }
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
         {

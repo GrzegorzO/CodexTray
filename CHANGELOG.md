@@ -7,6 +7,13 @@ All notable changes are documented here. This project follows
 
 ### Changed
 
+- One icon per task now keeps finished main-task shortcuts static at 40%
+  opacity, including project badges, with a Finished tooltip and frozen runtime.
+  Clicking opens and dismisses them across monitors; observed local unread-to-read
+  transitions also dismiss them. New turns replace the old shortcut at the outer
+  edge. Shortcuts last until CodexTray exits; historical stops are excluded.
+  Icon and number continues to count only running tasks. Manual-open dismissal
+  depends on compatible Codex unread metadata and can miss transitions between polls.
 - Fresh configurations now use the current personal preset: Neon batteries,
   countdown labels, and custom placement 8 pixels from the taskbar's left edge.
   Existing saved preferences continue to override these defaults. Working-agent
@@ -39,7 +46,7 @@ All notable changes are documented here. This project follows
 - Working local-agent counter with eleven loading styles: rotating arc, orbiting
   dots, pulsing dot, animated bars, spinning spokes, bouncing dots, ripple rings,
   rotating diamond, radar sweep, hourglass, and an animated robot head; hidden
-  without spacing when idle
+  without spacing when there are no running or retained finished icons
 - Saved counter visibility, animation, and far-left/far-right placement settings
   with right-side placement by default
 - Local activity diagnostics via `--print-activity` and a loading-style gallery

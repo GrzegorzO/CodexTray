@@ -27,14 +27,16 @@ use unreleased features; check the changelog when using a release archive.
 - Percentages centered in, or placed to the left or right of, the batteries
 - Left, right, or per-monitor custom taskbar placement
 - Live main-task activity with eleven loading-icon styles, including an
-  animated robot head; hidden entirely when idle
+  animated robot head; finished per-task icons remain faded until acknowledged
 - Optional sounds when main tasks stop, with nine bundled choices and a minimum runtime
 - Separate question alerts with six Hmm/Huh voice clips, previews, and custom WAV support
 - Counter at the far left or right (default), centered vertically, with optional
   animation and synchronization
 - Working-agent icons use a fixed, large size for readability
-- Icon and number, or one spaced icon per running main task, expanding outward
+- Icon and number, or spaced per-task icons with finished shortcuts, expanding outward
 - Click a repeated task icon to bring Codex Desktop forward to that session
+- Finished task icons stay static and faded; clicking, reading the session in
+  Codex, or starting another turn clears the old icon
 - Hover a task icon to see its project name and elapsed turn time
 - Optional project colors for repeated task icons, matching Codex Desktop's palette
 - Switchable project icon badges at the upper-right of repeated loading icons
@@ -105,7 +107,7 @@ Right-click either the taskbar widget or notification-area icon:
 | **Display → Working agents → Show counter when working** | Enable or disable the activity indicator (enabled by default) |
 | **Display → Working agents → Loading icon style** | Eleven activity-icon styles; Robot head by default |
 | **Display → Working agents → Counter position** | Right of all controls (default) or left of all controls |
-| **Display → Working agents → Display mode** | One icon per running main task (default), or icon and number |
+| **Display → Working agents → Display mode** | One icon per task (default), retaining faded finished icons, or icon and running-task number |
 | **Display → Working agents → Animate loading icon** | Enabled by default; turn off for a static icon |
 | **Display → Working agents → Synchronize icon animations** | Off by default (staggered timing); enable to animate repeated icons together |
 | **Display → Working agents → Use project colors** | On by default; available in One icon per task mode to color each icon by its task's project |
@@ -133,8 +135,20 @@ in line with [WCAG non-text contrast guidance](https://www.w3.org/WAI/WCAG21/Und
 ### Working-agent indicators
 
 The indicator is enabled by default and appears when a compatible local Codex
-session has an in-progress turn. Nothing is shown at zero; this is normal when
-Codex is idle. Open **Display → Working agents** to change its appearance.
+session has an in-progress turn. In **One icon per task** mode, finished icons
+remain static at 40% opacity, including their project badges. Click one to open
+its session and dismiss it across all monitors. Opening the chat in Codex also
+clears it when CodexTray observes its local unread flag clear. A new turn in the
+same session replaces the old icon with a normal active icon at the outer edge.
+The tooltip says **Finished** and freezes the completed turn's runtime.
+Finished icons include observed completion, interruption, and writer-lock release;
+they are kept only until CodexTray exits, and historical completions are not added
+at startup. If unread metadata is unavailable or a read transition happens
+between polls, click the icon to dismiss it. No Codex read state is modified.
+With no running tasks or retained icons, the indicator releases all its space.
+Open **Display → Working agents** to change its appearance.
+
+![Static synthetic previews of active and faded finished icons](docs/images/finished-agents-gallery.png)
 
 In **One icon per task** mode, hover an icon or its project badge to see the
 project name and current turn runtime: `42s` below one minute, `2m 15s` through
@@ -153,8 +167,8 @@ controller's icon within the same factory project; workers running
 without an active matching controller remain visible, including hidden sessions.
 A main turn waiting on a tool, approval, or user input still counts until
 completion or interruption. The indicator is vertically
-centered beside the full battery, label, and percentage group. At zero, both the
-icon and count disappear and the widget releases that space. Turning off animation
+centered beside the full battery, label, and percentage group. In **Icon and number**
+mode, both the icon and count disappear at zero. Turning off animation
 keeps the selected icon static.
 Working-agent icons, count, and spacing use the former Large size (130% of the
 original). This fixed size also applies to existing installations; earlier size
@@ -223,8 +237,8 @@ tokens. The process is closed immediately after the response.
 Agent activity is read separately from local Codex session lifecycle events and
 thread writer locks under `CODEX_HOME` (or `%USERPROFILE%\.codex`). Session metadata
 excludes subagent sources and parent-linked workers. An in-progress main turn
-counts once; completion or interruption removes it. A released writer lock also
-removes it, so a crashed Codex process cannot leave a phantom count. Loaded idle
+counts once; completion, interruption, or a released writer lock removes it from
+the running count. Repeated-icon mode retains a faded finished shortcut. Loaded idle
 threads do not count. This requires Codex's local writer-lock/session format;
 remote/cloud-only tasks and sessions without those files are not included.
 The local file format is a Codex implementation detail and can change between
@@ -233,7 +247,8 @@ are missing or incompatible, an absent indicator does not prove all agents are i
 The monitor reads locally on a background thread and sends no model requests.
 Animation runs only while a visible widget has a nonzero count.
 Project names, coloring, badges, and factory-controller matching additionally
-read Codex Desktop's local `.codex-global-state.json`. It uses task-project
+read Codex Desktop's local `.codex-global-state.json`. Finished-icon dismissal
+also observes its versioned local unread-thread flags. It uses task-project
 assignments, workspace hints, and project roots. Project names are resolved even
 with colors and badges off. This desktop state format can change too;
 unavailable mappings use workspace folder names and the normal blue and keep
