@@ -19,6 +19,26 @@ internal static class Program
 
     private static int Run(string[] args)
     {
+        if (args.Contains("--print-report-windows", StringComparer.OrdinalIgnoreCase))
+        {
+            var limits = CodexRateLimitClient.ReadAsync(CancellationToken.None).GetAwaiter().GetResult();
+            var reader = new TokenUsageReportReader();
+            var now = DateTimeOffset.UtcNow;
+            foreach (var preset in new[] { ReportPreset.CurrentFiveHour, ReportPreset.CurrentWeekly, ReportPreset.PreviousWeekly })
+            {
+                var report = reader.Read(preset, now, now, limits, now, CancellationToken.None);
+                Console.WriteLine($"{preset}: {report.Period?.Start:O} → {report.Period?.End:O}; {report.Projects.Count} projects; {report.Period?.Note}");
+            }
+            return 0;
+        }
+        var reportPreview = Array.FindIndex(args, argument => argument.Equals("--export-report-preview", StringComparison.OrdinalIgnoreCase));
+        if (reportPreview >= 0)
+        {
+            ApplicationConfiguration.Initialize();
+            ReportTheme.InitializeNativeMode();
+            TokenReportForm.ExportPreview(reportPreview + 1 < args.Length ? args[reportPreview + 1] : "usage-report.png");
+            return 0;
+        }
         if (args.Contains("--print-project-icons", StringComparer.OrdinalIgnoreCase))
         {
             var argument = Array.FindIndex(args, value => value.Equals("--print-project-icons", StringComparison.OrdinalIgnoreCase));
@@ -50,6 +70,8 @@ internal static class Program
 
         if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
         {
+            ApplicationConfiguration.Initialize();
+            ReportTheme.InitializeNativeMode();
             return SelfTest.Run();
         }
 
@@ -62,6 +84,7 @@ internal static class Program
                 ? args[screenshotArgument + 1]
                 : Path.Combine(AppContext.BaseDirectory, "screenshots");
             ApplicationConfiguration.Initialize();
+            ReportTheme.InitializeNativeMode();
             return ScreenshotExporter.Run(outputDirectory);
         }
 
@@ -106,6 +129,7 @@ internal static class Program
         AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
             AppLog.Write($"Unhandled application error: {eventArgs.ExceptionObject}");
         ApplicationConfiguration.Initialize();
+        ReportTheme.InitializeNativeMode();
         using var context = new TrayApplicationContext();
         AppLog.Write("Tray initialized; entering message loop.");
         Application.Run(context);

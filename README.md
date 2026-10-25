@@ -18,6 +18,9 @@ use unreleased features; check the changelog when using a release archive.
 ## Highlights
 
 - Two filled battery gauges: 5-hour on top, weekly on the bottom
+- Interactive local token reports by project, with custom dates and current or
+  previous 5-hour/weekly windows, project colors and icons, and token breakdowns
+  with donut charts in Windows light or dark mode
 - Blue at 90% or above, green above 50%, orange above 25%, red above 5%,
   and purple for the last 5%
 - Eleven battery styles: Classic, Futuristic, Fluent, Minimal, High contrast, Neon,
@@ -95,6 +98,7 @@ Right-click either the taskbar widget or notification-area icon:
 | Menu | Options |
 | --- | --- |
 | **Show details** | Show percentages, reset times, and the running main-task count |
+| **Show usage report** | Open a dynamic per-project token chart with date/window selection and clickable token details |
 | **Refresh** | Request a usage update immediately |
 | **Show this widget in taskbar** | Show or hide widgets on every monitor |
 | **Display → Style** | Eleven classic, modern, accessible, and decorative styles |
@@ -131,6 +135,51 @@ The battery styles use familiar visual conventions: **Fluent** follows
 **Minimal** uses a quiet determinate progress track, and **High contrast** combines
 a strong outline with hatching so fill state is not communicated by color alone,
 in line with [WCAG non-text contrast guidance](https://www.w3.org/WAI/WCAG21/Understanding/non-text-contrast.html).
+
+### Token usage reports
+
+Right-click the widget or tray icon and choose **Show usage report**. Select
+custom dates, the current or previous **5h window**, or the current or previous
+**7d window**. Custom end dates include the whole selected local day. The chart
+shows a vertical bar for each project that has recorded usage, using its Codex
+color, icon, and name. Click a bar or label to regenerate the report and inspect
+input, cached input, cache writes, output, and reasoning token counts. Arrow keys
+also select projects. **Refresh report** and reopening the menu item regenerate
+the report as well.
+
+The report follows Windows app light/dark mode, including changes while open,
+and uses a card layout with clear totals and Segoe UI typography. The largest
+project is selected automatically. Its donut chart shows **Other input**,
+**Cached input**, **Other output**, and **Reasoning**, with exact counts and
+percentages. Cache writes remain separately labelled as an input subset.
+Selecting a project updates the view immediately while fresh data is read;
+the last completed view stays visible during refresh. **About this data** keeps
+coverage, reset-boundary details, and project identities available without
+crowding the dashboard. Calendar controls appear when **Custom dates** is chosen.
+
+A loading panel shows the current step and elapsed time, with **Cancel**.
+After history discovery, it shows checked-file counts and reading progress;
+quota lookup, discovery, and calculation use an animated indicator while their
+total is unknown. Reading large individual files contributes byte progress.
+Quota discovery and history reading run in the background so the window can
+paint and respond immediately.
+
+Window presets use recorded reset history and a fresh quota read. Early resets
+can shorten a previous weekly window to, for example, two days. A reset change
+is only observed when a record is available, so early boundaries are labelled
+approximate; normal starts are inferred from reset time and nominal duration.
+Reset estimate changes within two minutes are treated as corrections to the
+same window, preserving its start rather than falsely beginning a new window.
+Unknown previous windows are unavailable rather than invented. Counts cover
+local recorded usage, including subagents, and are not quota percentages or a
+complete account-wide billing report. See the [report guide](docs/usage-reports.md)
+for attribution and history limitations.
+
+![Static synthetic token report preview, not manual desktop verification](docs/images/usage-report.png)
+
+![Static synthetic token report in dark mode, not manual desktop verification](docs/images/usage-report-dark.png)
+
+![Static synthetic loading state, not manual desktop verification](docs/images/usage-report-loading-dark.png)
 
 ### Working-agent indicators
 
@@ -284,8 +333,9 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 
 - No analytics, telemetry, advertisements, or update service
 - No direct reading of `auth.json`, API keys, passwords, or browser data
-- Agent activity reads local Codex session logs, which can contain conversation
-  content, to inspect session metadata and turn lifecycle events. CodexTray does
+- Agent activity and token reports read local Codex session logs, which can contain
+  conversation content, to inspect metadata, lifecycle events, token counts, and
+  reset observations. Reports also scan archived sessions. CodexTray does
   not upload, save, or log that content, and does not change session-file contents.
 - Project names, coloring, badges, and factory-controller matching read local desktop
   project metadata. It does not modify Codex's state or project settings.
@@ -294,6 +344,8 @@ log. See [startup troubleshooting](docs/startup-troubleshooting.md).
 - No model prompts or generation requests
 - Network/authentication behavior is delegated to the installed Codex app server
 - Display preferences remain in the current user's Windows registry hive
+- The report reads the Windows app color preference and honors high contrast;
+  it does not change Windows appearance settings
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and supported builds.
 
@@ -304,10 +356,14 @@ dotnet format --verify-no-changes --no-restore
 dotnet build --configuration Release --no-restore
 dotnet run --configuration Release --no-build -- --self-test
 dotnet run --configuration Release --no-build -- --print
+
+dotnet run --configuration Release --no-build -- --print-report-windows
 dotnet run --configuration Release --no-build -- --print-activity
 dotnet run --configuration Release --no-build -- --print-activity --project-colors
 dotnet run --configuration Release --no-build -- --print-project-icons
 dotnet run --configuration Release --no-build -- --export-screenshots .\docs\images
+
+dotnet run --configuration Release --no-build -- --export-report-preview .\docs\images\usage-report.png
 ```
 
 The project has no third-party runtime packages. CI builds and runs the self-test

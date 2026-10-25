@@ -58,6 +58,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ForegroundWindowMonitor _foregroundWindowMonitor;
     private UsageSnapshot? _snapshot;
+    private TokenReportForm? _report;
     private string? _lastError;
     private Icon? _currentIcon;
 
@@ -415,6 +416,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _menu = new ContextMenuStrip();
         _menu.Items.Add("Show details", null, ShowDetails);
+        _menu.Items.Add("Show usage report", null, (_, _) =>
+        {
+            if (_report is null || _report.IsDisposed)
+            {
+                _report = new TokenReportForm(() => _snapshot);
+                _report.Show();
+            }
+            else
+            {
+                if (_report.WindowState == FormWindowState.Minimized) { _report.WindowState = FormWindowState.Normal; }
+                _report.Show();
+                _report.Activate();
+                _ = _report.GenerateAsync();
+            }
+        });
         _menu.Items.Add("Refresh", null, async (_, _) => await RefreshAsync(showErrors: true));
         _menu.Items.Add(displayMenu);
         _menu.Items.Add(_startupItem);
@@ -867,6 +883,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _visibilityTimer.Stop();
         _activityTimer.Stop();
         _shutdown.Cancel();
+        _report?.Close();
         _foregroundWindowMonitor.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         foreach (var widget in _widgets)

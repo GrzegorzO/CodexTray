@@ -10,6 +10,8 @@ internal static class SelfTest
     {
         try
         {
+            TokenReportSelfTest.Run();
+            TokenReportPresentationTests.Run();
             VerifyStartupTask();
             VerifyStartupTaskLookup();
             VerifyStartupRecovery();

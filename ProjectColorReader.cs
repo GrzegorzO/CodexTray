@@ -46,6 +46,7 @@ internal sealed class ProjectColorReader(string home)
     internal Color? Resolve(string threadId, string? workingDirectory) => _map.Resolve(threadId, workingDirectory);
     internal ProjectMarker? ResolveMarker(string threadId, string? workingDirectory) => _map.ResolveMarker(threadId, workingDirectory);
     internal string? ResolveName(string threadId, string? workingDirectory) => _map.ResolveName(threadId, workingDirectory);
+    internal string ResolveIdentity(string threadId, string? workingDirectory) => _map.ResolveIdentity(threadId, workingDirectory);
     internal bool IsInProject(string threadId, string? workingDirectory, string projectDirectory) =>
         _map.IsInProject(threadId, workingDirectory, projectDirectory);
 }
@@ -144,6 +145,16 @@ internal sealed class ProjectColorMap
 
     internal Color? Resolve(string threadId, string? workingDirectory) =>
         ProjectForTask(threadId, workingDirectory) is { } id ? ColorForProject(id) : null;
+
+    internal string ResolveIdentity(string threadId, string? workingDirectory)
+    {
+        if (_projectless.Contains(threadId)) { return "projectless"; }
+        if (ProjectForTask(threadId, workingDirectory) is { } id)
+        {
+            return "project:" + _legacyIds.GetValueOrDefault(id, id);
+        }
+        return NormalizeDirectory(workingDirectory) is { } directory ? "directory:" + directory : "projectless";
+    }
 
     internal string? ResolveName(string threadId, string? workingDirectory)
     {

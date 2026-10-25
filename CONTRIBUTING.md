@@ -40,6 +40,19 @@ Use synthetic SVG/ASAR fixtures to test vector decoding; do not commit extracted
 desktop source or assets. Check the optional live `--print-project-icons`
 diagnostic and transparent rendering at different display scales.
 
+For token-report changes, run `--self-test` and regenerate the synthetic report
+preview using the command in [the report guide](docs/usage-reports.md). Verify
+period switching, date boundaries, early resets, bar/label and keyboard selection,
+new usage after a click, many-project scrolling, and closing during a read.
+Check project colors/icons, equal-name identities, and high-DPI layouts without
+including real project/session metadata in public previews. State which manual
+scenarios were actually tested.
+Regenerate both light/dark previews after report-rendering changes. Check system
+theme changes while open, native filter flyouts, minimum-size scrolling, and
+donut proportions without counting cached or reasoning subsets twice. The
+self-test includes synthetic presentation and geometry checks; these are not
+manual multi-monitor or screen-reader verification.
+
 ## Pull requests
 
 Describe the motivation, implementation, and manual verification. Include a

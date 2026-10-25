@@ -140,6 +140,85 @@ project accent, even when loading-icon coloring is off. Unknown markers fall
 back to folders; unmatched/projectless tasks have no badge. Badge geometry fits
 inside the existing indicator width and scales with the loading icons.
 
+## Token reports
+
+`TokenReportForm` is a separate native WinForms window opened by **Show usage
+report** in the shared tray/widget menu. Each period change, date change, project
+selection, explicit refresh, or reopening regenerates the report asynchronously.
+Window presets request fresh app-server quota metadata; failures fall back to
+available reset history with a visible notice. Cancellation suppresses outdated
+results; a semaphore serializes the reader's cache access. Closing cancels reads.
+Quota lookup is wrapped in a worker task as well, because executable discovery
+can block synchronously before the app-server client's first await. This lets
+the first loading frame paint and keeps controls responsive throughout lookup.
+`ReportReadProgress` reports discovery, file reads (including byte progress in a
+large file), and grouping. Updates are throttled to 100 ms and marshalled through
+`Progress<T>` to the UI; cancelled, superseded, or completed requests ignore late
+notifications. A themed progress bar animates at unknown-length stages and shows
+file-reading progress when the total is known. A UI timer updates animation and
+elapsed time; Cancel preserves the completed view. Disposal is idempotent.
+
+`ReportTheme` follows the Windows `AppsUseLightTheme` preference and high-contrast
+system colors. .NET's native system color mode themes native controls and menus;
+the report listens for user-preference changes to recolor its custom cards and
+charts on the UI thread. Preview exports force light and dark only within their
+own process. No Windows appearance preferences are written. `ReportDrawing`
+uses Segoe UI in logical pixel units, scaling once per graphics surface.
+
+`ReportHeading`, `ReportSummary`, `ProjectTokenChart`, and `TokenDetailChart`
+render the dashboard hierarchy. The first project is selected automatically;
+selection updates immediately and then regenerates from disk. Refreshes preserve
+the last completed view, with a loading panel and error/retry states. Keyboard
+selection scrolls its project into view. The initial window fits the display's
+working area, with wrapping filters and scrollable chart/detail viewports at
+smaller window sizes. Raw project IDs and coverage diagnostics are available
+in tooltips and About this data, rather than taking space in the main dashboard.
+`TokenBreakdown` partitions total tokens into other input, cached input, other
+output, and reasoning. Cache writes are displayed separately as an input subset,
+avoiding overlap. Inconsistent cached/reasoning subsets are capped for geometry;
+the raw recorded counters remain accessible in About this data.
+
+`TokenUsageReportReader` scans `sessions` and `archived_sessions` under `CODEX_HOME`
+(default `%USERPROFILE%\.codex`). Unchanged file results are cached by path,
+length, and last-write time; changed files are reparsed. Only matching rollout
+metadata, token counts, and Codex reset observations are retained in memory.
+Cumulative token deltas suppress duplicate notifications. Inherited fork records
+establish baselines without contributing usage before the owning session's
+creation timestamp. Archived duplicate session IDs contribute once. Partial
+final lines are retried after changes; malformed usage records and read failures
+are counted. Conversation records are neither retained nor logged.
+
+Project identities come from `ProjectColorReader` independently of display names,
+with canonical/legacy IDs, explicit assignments, workspace hints, roots, and full
+directory fallbacks. Explicitly projectless tasks share a No project group.
+Unassigned subagent worktrees can follow recorded ancestor project assignments.
+The existing color and marker renderers supply bars and labels; current metadata
+is used rather than a historical project-settings ledger. All projects remain
+available through horizontal scrolling. Project clicks and arrow keys regenerate
+the selected detail view. Input plus output defines total tokens; cached input,
+cache writes, and reasoning are labelled as subsets rather than added again.
+
+Period resolution orders observed reset identities separately for 300- and
+10,080-minute windows. Reset estimates within two minutes of a stable identity
+are coalesced into the same window, keeping its start and using the latest end;
+inferred starts can extend slightly earlier when an estimate is corrected.
+A larger reset change before its former expiry closes the old
+window at the first changed observation, with an approximate-boundary notice.
+Other starts use reset minus nominal duration. The previous window is the last
+observed completed window; no arbitrary preceding seven-day interval is invented
+when history is absent. Custom dates use local midnight boundaries and an
+exclusive next-day end (including daylight-saving transitions). Reports cover
+available local logs, not remote or deleted usage, quota attribution, or billing.
+`--export-report-preview` renders the real form with synthetic data in an
+offscreen window in light and dark modes without session/project metadata reads or quota requests. Icons
+may use installed desktop vectors. This is a static preview, not interactive
+desktop verification.
+Loading previews use fixed synthetic file counts and a stopped timer.
+`--print-report-windows` provides ranges and project counts without exposing
+project identities. WinForms configuration precedes native color-mode setup,
+including the self-test and export entry points, so theme initialization cannot
+create a window before text-rendering configuration is established.
+
 ## Refresh lifecycle
 
 ```text

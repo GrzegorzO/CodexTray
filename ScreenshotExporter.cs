@@ -51,6 +51,7 @@ internal static class ScreenshotExporter
             RenderProjectColorGallery(outputDirectory, snapshot, showProjectIcons: true);
             RenderTaskTooltipGallery(outputDirectory, snapshot);
             RenderFinishedAgentGallery(outputDirectory, snapshot);
+            TokenReportForm.ExportPreview(Path.Combine(outputDirectory, "usage-report.png"));
             return 0;
         }
         catch (Exception exception)

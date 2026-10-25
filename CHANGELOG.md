@@ -22,6 +22,18 @@ All notable changes are documented here. This project follows
 
 ### Added
 
+- **Show usage report** on both right-click menus: a native, dynamically rebuilt
+  per-project token report with custom dates and current/previous 5-hour or weekly
+  reset windows. Vertical bars use project colors, icons, and names; clicking a
+  bar shows exact recorded input, cached input, cache writes, output, and reasoning
+  counts. The dashboard follows Windows light/dark mode, with summary cards,
+  Segoe UI typography, a selected-project donut chart and percentages, automatic
+  initial selection, and immediate selection feedback during refreshes. Donut
+  slices partition input/output without counting cached or reasoning tokens twice.
+  A visible loading panel shows the current stage, history-file progress and
+  elapsed time, with Cancel; quota discovery also runs off the UI thread.
+  Early reset observations can shorten previous windows; approximate or missing
+  boundaries and incomplete local history are disclosed under **About this data**.
 - Per-task hover tooltips with the project name and live elapsed turn time:
   seconds below one minute, minutes and seconds through five minutes, and whole
   minutes above five minutes, independently of colors, badges, and animation.
@@ -58,6 +70,10 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Keep small reset-time corrections in the same usage window instead of creating
+  false early resets that could empty or truncate the current weekly report.
+  Real larger early resets still shorten windows. Initialize native theming after
+  WinForms configuration, and safely handle repeated report disposal.
 - Hide factory-dispatched workers while a main controller in the same factory
   project is active; show workers when running alone, including hidden sessions.
   Hidden worker completions do not produce extra completion sounds.
