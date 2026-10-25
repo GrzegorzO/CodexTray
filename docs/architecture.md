@@ -178,6 +178,12 @@ output, and reasoning. Cache writes are displayed separately as an input subset,
 avoiding overlap. Inconsistent cached/reasoning subsets are capped for geometry;
 the raw recorded counters remain accessible in About this data.
 
+Calendar controls own the custom range independently of quota presets. A guarded
+date-change transaction moves the opposite endpoint only when the edited pair
+would invert, then starts one regeneration. Preset results update their summary
+without overwriting hidden custom dates. Custom summaries display inclusive
+calendar days, while filtering retains the exclusive next-day midnight boundary.
+
 `TokenUsageReportReader` scans `sessions` and `archived_sessions` under `CODEX_HOME`
 (default `%USERPROFILE%\.codex`). Unchanged file results are cached by path,
 length, and last-write time; changed files are reparsed. Only matching rollout

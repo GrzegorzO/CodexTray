@@ -12,7 +12,15 @@ Right-click either the taskbar widget or notification-area icon, then choose
 - **Current 7d window / Previous 7d window** use weekly reset history.
 - **Custom dates** includes both selected local calendar dates, from midnight on
   the start date to midnight after the end date. Daylight-saving days follow
-  local Windows time rules. The displayed timestamp range has an exclusive end.
+  local Windows time rules. The summary shows the selected inclusive calendar
+  dates; **About this data** shows precise timestamps with an exclusive end.
+
+You can edit the custom dates in either order. If **Through** moves before
+**From**, the start moves back to the selected end date. If **From** moves after
+**Through**, the end moves forward to the selected start date. The edited
+endpoint wins, so a same-day range remains valid and the report never refreshes
+an intermediate inverted pair. Quota presets leave these hidden calendar values
+alone; switching back restores your custom range for the lifetime of this window.
 
 Presets request fresh reset metadata through the existing Codex app server. If
 that request fails, the report labels its fallback to available reset history.
@@ -129,15 +137,18 @@ The command renders the report form offscreen without reading session/project
 metadata or requesting quota metadata. Icons may use installed desktop vectors.
 The command writes the light preview to the requested path and a dark preview
 with `-dark` appended to its filename. Additional `-loading` and `-loading-dark`
-images show a reproducible synthetic loading state. The full
-`--export-screenshots` command includes all four previews too. Dates/numbers
-follow local Windows formatting.
+images show a reproducible synthetic loading state. Additional `-custom` and
+`-custom-dark` images show a valid custom range after editing the end first.
+The full `--export-screenshots` command includes all six previews too.
+Dates/numbers follow local Windows formatting.
 
 ![Static synthetic report preview, not manual desktop verification](images/usage-report.png)
 
 ![Static synthetic dark report preview, not manual desktop verification](images/usage-report-dark.png)
 
 ![Static synthetic loading state, not manual desktop verification](images/usage-report-loading-dark.png)
+
+![Static synthetic custom-date range after editing the end first](images/usage-report-custom-dark.png)
 
 `--self-test` covers token deltas, duplicates, fork baselines, incomplete writes,
 archive duplication, distinct identities with equal names, project appearance,
@@ -151,6 +162,9 @@ weekly project coverage when its range contains the five-hour range, and progres
 stages/cached-file counts. A synthetic WinForms message-loop test blocks quota
 lookup on a worker and verifies that UI timers still run, the loading panel is
 visible, and Cancel dismisses it safely.
+Custom-date regressions exercise native picker change events in both edit
+directions, valid and same-day ranges, round trips through all quota presets,
+and the inclusive dates shown in the summary.
 Interactive desktop theme changes, native calendar/dropdown flyouts, screen
 readers, and scaling across physical monitors still require manual verification.
 

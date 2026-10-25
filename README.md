@@ -156,6 +156,10 @@ Selecting a project updates the view immediately while fresh data is read;
 the last completed view stays visible during refresh. **About this data** keeps
 coverage, reset-boundary details, and project identities available without
 crowding the dashboard. Calendar controls appear when **Custom dates** is chosen.
+Custom dates stay ordered: editing an endpoint past the other moves the other
+endpoint to the chosen day. The summary shows the same inclusive calendar dates.
+Switching to quota presets and back preserves your custom range while the report
+window stays open.
 
 A loading panel shows the current step and elapsed time, with **Cancel**.
 After history discovery, it shows checked-file counts and reading progress;

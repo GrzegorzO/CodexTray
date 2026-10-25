@@ -32,8 +32,18 @@ internal sealed class ReportSummary : Control
     internal ReportTheme Theme = ReportTheme.Light;
     private TokenReport? _report;
     private string _period = "Usage period";
+    private bool _calendarDates;
+    internal string RangeText => _report?.Period is { } period ? _calendarDates ?
+        $"{period.Start.ToLocalTime():dd MMM yyyy} → {period.End.AddTicks(-1).ToLocalTime():dd MMM yyyy} (inclusive)" :
+        $"{period.Start.ToLocalTime():dd MMM, HH:mm} → {period.End.ToLocalTime():dd MMM, HH:mm}" : "Reset history or custom calendar dates";
     internal ReportSummary() { DoubleBuffered = true; SetStyle(ControlStyles.ResizeRedraw, true); }
-    internal void SetReport(TokenReport? report, string period) { _report = report; _period = period; Invalidate(); }
+    internal void SetReport(TokenReport? report, string period, bool calendarDates = false)
+    {
+        _report = report;
+        _period = period;
+        _calendarDates = calendarDates;
+        Invalidate();
+    }
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -56,8 +66,7 @@ internal sealed class ReportSummary : Control
         ReportDrawing.Text(g, "With recorded usage", 12, Theme.Muted, new(a, 60, b - a - 30, 20));
         ReportDrawing.Text(g, "SELECTED PERIOD", 10, Theme.Muted, new(b, 0, width - b, 20), FontStyle.Bold);
         ReportDrawing.Text(g, _period, 18, Theme.Text, new(b, 22, width - b, 32), FontStyle.Bold);
-        var range = _report?.Period is { } period ? $"{period.Start.ToLocalTime():dd MMM, HH:mm} → {period.End.ToLocalTime():dd MMM, HH:mm}" : "Reset history or custom calendar dates";
-        ReportDrawing.Text(g, range, 12, Theme.Muted, new(b, 60, width - b, 20));
+        ReportDrawing.Text(g, RangeText, 12, Theme.Muted, new(b, 60, width - b, 20));
     }
 }
 

@@ -70,6 +70,10 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Keep custom report dates ordered when either endpoint crosses the other, and
+  preserve the custom range while visiting quota presets. The custom summary
+  shows the same inclusive days as the date controls rather than the following
+  midnight used internally for filtering.
 - Keep small reset-time corrections in the same usage window instead of creating
   false early resets that could empty or truncate the current weekly report.
   Real larger early resets still shorten windows. Initialize native theming after

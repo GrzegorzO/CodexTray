@@ -48,6 +48,7 @@ internal static class TokenReportPresentationTests
             }
         }
         TokenReportForm.VerifyPresentation();
+        TokenReportForm.VerifyCustomDates();
         TokenReportForm.VerifyResponsiveLoading();
     }
 

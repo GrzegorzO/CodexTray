@@ -50,6 +50,7 @@ internal sealed class TokenReportForm : Form
     private bool _ready;
     private bool _busy;
     private bool _statusWarning;
+    private bool _adjustingDates;
 
     internal TokenReportForm(Func<UsageSnapshot?> snapshot, bool preview = false, ReportTheme? forcedTheme = null,
         Func<CancellationToken, Task<UsageSnapshot>>? readQuota = null)
@@ -168,8 +169,10 @@ internal sealed class TokenReportForm : Form
             _selected = null;
             _ = GenerateAsync();
         };
-        _from.ValueChanged += (_, _) => { if (_from.Enabled) { _ = GenerateAsync(); } };
-        _to.ValueChanged += (_, _) => { if (_to.Enabled) { _ = GenerateAsync(); } };
+        _from.ValueChanged += (_, _) => CustomDateChanged(startEdited: true);
+        _to.ValueChanged += (_, _) => CustomDateChanged(startEdited: false);
+        _tooltip.SetToolTip(_from, "Moving the start past the end also moves the end to the selected day.");
+        _tooltip.SetToolTip(_to, "Moving the end before the start also moves the start to the selected day.");
         _refresh.Click += (_, _) => _ = GenerateAsync();
         _loadingTimer.Tick += (_, _) => UpdateLoadingText();
         _cancel.Click += (_, _) =>
@@ -206,6 +209,24 @@ internal sealed class TokenReportForm : Form
         var font = new Font("Segoe UI", size, style);
         _fonts.Add(font);
         return font;
+    }
+
+    private void CustomDateChanged(bool startEdited)
+    {
+        if (_adjustingDates || _preset.SelectedIndex != (int)ReportPreset.Custom) { return; }
+        _adjustingDates = true;
+        try
+        {
+            // The endpoint the user edits wins; normalize the pair before starting
+            // one refresh so no transient inverted range can clear the report.
+            if (_from.Value.Date > _to.Value.Date)
+            {
+                if (startEdited) { _to.Value = _from.Value.Date; }
+                else { _from.Value = _to.Value.Date; }
+            }
+        }
+        finally { _adjustingDates = false; }
+        _ = GenerateAsync();
     }
     private static Label SmallLabel(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(0, 6, 8, 0), Tag = "muted" };
     private ReportCard Card(Padding padding)
@@ -391,12 +412,10 @@ internal sealed class TokenReportForm : Form
         SetBusy(false);
         _report = report;
         var period = report.Period;
-        if (period is not null && _preset.SelectedIndex != (int)ReportPreset.Custom)
-        {
-            _from.Value = period.Start.LocalDateTime.Date;
-            _to.Value = period.End.AddTicks(-1).LocalDateTime.Date;
-        }
-        _summary.SetReport(period is null ? null : report, _preset.SelectedItem?.ToString() ?? "Usage period");
+        // Hidden calendar controls belong exclusively to Custom dates. Quota
+        // presets show their range in the summary without overwriting this pair.
+        _summary.SetReport(period is null ? null : report, _preset.SelectedItem?.ToString() ?? "Usage period",
+            calendarDates: _preset.SelectedIndex == (int)ReportPreset.Custom);
         _aboutText = (period is null ? "" : $"Window: {period.Start.ToLocalTime():g} → {period.End.ToLocalTime():g} (end exclusive).\n{period.Note}\n") +
             quotaNote + "\n" + report.Notice + "\n\nCounts reflect current project assignments. Missing fields can appear as zero. Cached input is part of input; reasoning is part of output.";
         _tooltip.SetToolTip(_status, _aboutText);
@@ -439,6 +458,8 @@ internal sealed class TokenReportForm : Form
         ExportOne(Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-dark" + Path.GetExtension(path)), ReportTheme.Night);
         ExportOne(Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-loading" + Path.GetExtension(path)), ReportTheme.Light, loading: true);
         ExportOne(Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-loading-dark" + Path.GetExtension(path)), ReportTheme.Night, loading: true);
+        ExportOne(Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-custom" + Path.GetExtension(path)), ReportTheme.Light, custom: true);
+        ExportOne(Path.Combine(Path.GetDirectoryName(path) ?? "", Path.GetFileNameWithoutExtension(path) + "-custom-dark" + Path.GetExtension(path)), ReportTheme.Night, custom: true);
     }
 
     internal static void VerifyPresentation()
@@ -483,7 +504,7 @@ internal sealed class TokenReportForm : Form
         }
     }
 
-    private static void ExportOne(string path, ReportTheme theme, bool loading = false)
+    private static void ExportOne(string path, ReportTheme theme, bool loading = false, bool custom = false)
     {
 #pragma warning disable WFO5001
         Application.SetColorMode(theme.Dark ? SystemColorMode.Dark : SystemColorMode.Classic);
@@ -498,9 +519,17 @@ internal sealed class TokenReportForm : Form
             new("project:sample-a", "Sample app", ProjectColorMap.ParseColor("green")!.Value, new ProjectMarker("terminal"), new TokenCounts(700000, 400000, 12000, 80000, 23000), 42),
             new("project:sample-b", "Design tools", ProjectColorMap.ParseColor("purple")!.Value, new ProjectMarker("code-brackets"), new TokenCounts(360000, 170000, 2000, 50000, 15000), 28),
             new("project:sample-c", "Documentation", Color.FromArgb(45, 125, 245), new ProjectMarker("folder"), new TokenCounts(120000, 40000, 0, 20000, 4000), 12)];
-        form._preset.SelectedIndex = 3;
+        form._preset.SelectedIndex = custom ? 4 : 3;
+        if (custom)
+        {
+            form._from.Value = new DateTime(2026, 10, 25);
+            form._to.Value = new DateTime(2026, 10, 14); // Reproduce editing the end first.
+            form._from.Value = new DateTime(2026, 10, 12);
+            start = new DateTimeOffset(form._from.Value.Date);
+        }
         form._heading.Synthetic = true;
-        form.ShowReport(new TokenReport(new ReportPeriod(start, start.AddDays(2), "Early reset boundary is the first observed change (approximate)."), projects,
+        form.ShowReport(new TokenReport(new ReportPeriod(start, custom ? new DateTimeOffset(form._to.Value.Date.AddDays(1)) : start.AddDays(2),
+            custom ? "Custom dates; end is exclusive." : "Early reset boundary is the first observed change (approximate)."), projects,
             "Static synthetic example · available local recorded tokens including subagents."), "");
         if (loading)
         {
@@ -585,5 +614,45 @@ internal sealed class TokenReportForm : Form
         thread.Start();
         if (!thread.Join(TimeSpan.FromSeconds(10))) { throw new InvalidOperationException("Responsive-loading test timed out."); }
         if (failure is not null) { throw new InvalidOperationException("Responsive-loading test failed.", failure); }
+    }
+
+    internal static void VerifyCustomDates()
+    {
+        using var form = new TokenReportForm(() => null, preview: true);
+        form.ShowInTaskbar = false;
+        form.StartPosition = FormStartPosition.Manual;
+        form.Location = new Point(-32000, -32000);
+        form.Show();
+        form._preset.SelectedIndex = (int)ReportPreset.Custom;
+        form._from.Value = new DateTime(2026, 10, 25);
+        form._to.Value = new DateTime(2026, 10, 14);
+        Check(form._from.Value.Date == new DateTime(2026, 10, 14) && form._to.Value.Date == form._from.Value.Date,
+            "Editing an earlier end date must move the start to the same day.");
+        form._from.Value = new DateTime(2026, 10, 1);
+        Check(form._to.Value.Date == new DateTime(2026, 10, 14), "A valid start edit must preserve the end date.");
+        form._from.Value = new DateTime(2026, 10, 20);
+        Check(form._to.Value.Date == form._from.Value.Date, "Editing a later start date must move the end to the same day.");
+        form._to.Value = new DateTime(2026, 10, 25);
+        var expectedStart = form._from.Value.Date;
+        var expectedEnd = form._to.Value.Date;
+        foreach (var preset in new[] { ReportPreset.CurrentWeekly, ReportPreset.PreviousFiveHour, ReportPreset.CurrentFiveHour, ReportPreset.PreviousWeekly })
+        {
+            form._preset.SelectedIndex = (int)preset;
+            var start = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+            form.ShowReport(new TokenReport(new ReportPeriod(start, start.AddDays(7), "Synthetic preset"), [], "Synthetic fixture"), "");
+            form._preset.SelectedIndex = (int)ReportPreset.Custom;
+            Check(form._from.Value.Date == expectedStart && form._to.Value.Date == expectedEnd,
+                "Quota preset results must not overwrite the remembered custom range.");
+        }
+        form._to.Value = expectedStart;
+        Check(form._from.Value.Date == form._to.Value.Date, "A same-day custom range must remain valid.");
+        var day = new DateTimeOffset(form._from.Value.Date);
+        form.ShowReport(new TokenReport(new ReportPeriod(day, new DateTimeOffset(form._to.Value.Date.AddDays(1)), "Synthetic custom day"), [], "Synthetic fixture"), "");
+        Check(form._summary.RangeText == $"{form._from.Value:dd MMM yyyy} → {form._to.Value:dd MMM yyyy} (inclusive)",
+            "The custom summary must show the inclusive days selected in the date pickers.");
+        static void Check(bool condition, string message)
+        {
+            if (!condition) { throw new InvalidOperationException(message); }
+        }
     }
 }
