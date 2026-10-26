@@ -70,6 +70,9 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Smooth taskbar battery percentages with supersampled Segoe UI Semibold text
+  and a softer shadow, including percentages placed beside the bars. Preserve
+  proportional sizing on high-DPI surfaces and transparent taskbar blending.
 - Use per-pixel alpha for the taskbar widget so finished icons and badges fade
   uniformly into the actual taskbar at 40% opacity, preserving their original
   colors instead of blending toward a black transparency key. Static previews

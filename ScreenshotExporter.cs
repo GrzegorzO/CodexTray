@@ -51,6 +51,7 @@ internal static class ScreenshotExporter
             RenderProjectColorGallery(outputDirectory, snapshot, showProjectIcons: true);
             RenderTaskTooltipGallery(outputDirectory, snapshot);
             RenderFinishedAgentGallery(outputDirectory, snapshot);
+            RenderBarTextPreview(outputDirectory);
             TokenReportForm.ExportPreview(Path.Combine(outputDirectory, "usage-report.png"));
             return 0;
         }
@@ -59,6 +60,35 @@ internal static class ScreenshotExporter
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static void RenderBarTextPreview(string outputDirectory)
+    {
+        using var gallery = new Bitmap(960, 502);
+        using var graphics = Graphics.FromImage(gallery);
+        graphics.Clear(Color.FromArgb(20, 20, 22));
+        using var captionFont = new Font("Segoe UI", 11, FontStyle.Regular, GraphicsUnit.Pixel);
+        graphics.DrawString("Percentage text · static synthetic previews · 43% / 45% remaining", captionFont, Brushes.White, 12, 10);
+        var now = DateTimeOffset.UnixEpoch;
+        var snapshot = new UsageSnapshot(new UsageWindow(57, 300, now.AddHours(2)),
+            new UsageWindow(55, 10080, now.AddDays(3)), null);
+        float[] scales = [1f, 1.25f, 1.5f, 2f];
+        for (var row = 0; row < scales.Length; row++)
+            for (var column = 0; column < 3; column++)
+            {
+                var position = new[] { PercentagePosition.Center, PercentagePosition.Left, PercentagePosition.Right }[column];
+                var card = new Rectangle(column * 320 + 8, row * 116 + 30, 304, 112);
+                using var background = new SolidBrush(TaskbarColor);
+                graphics.FillRectangle(background, card);
+                graphics.DrawString($"{scales[row]:0.##}× · {position}", captionFont, Brushes.White, card.X + 8, card.Y + 4);
+                using var menu = new ContextMenuStrip();
+                using var widget = new TaskbarWidgetForm(menu, Screen.PrimaryScreen ?? Screen.AllScreens.First(), loadSettings: false);
+                widget.ApplyDisplaySettings(DisplayStyle.Neon, false, true, LabelContentMode.Static, LabelPosition.Right, position);
+                widget.SetSnapshot(snapshot);
+                using var preview = widget.RenderPreview(TaskbarColor, scales[row]);
+                graphics.DrawImageUnscaled(preview, card.X + 8, card.Y + 19);
+            }
+        gallery.Save(Path.Combine(outputDirectory, "bar-text-preview.png"), ImageFormat.Png);
     }
 
     private static void RenderFinishedAgentGallery(string outputDirectory, UsageSnapshot snapshot)

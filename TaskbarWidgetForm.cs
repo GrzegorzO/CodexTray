@@ -1207,11 +1207,19 @@ internal sealed class TaskbarWidgetForm : Form
 
     private static void DrawPercentageText(Graphics graphics, Rectangle bounds, int? remainingPercent, Color color)
     {
+        // Small grid-fitted bold glyphs and a full-pixel shadow look jagged on
+        // the alpha surface. Downsample grayscale text without ClearType fringes.
+        const int samplingScale = 4;
+        using var textLayer = new Bitmap(bounds.Width * samplingScale, bounds.Height * samplingScale,
+            PixelFormat.Format32bppPArgb);
+        using var textGraphics = Graphics.FromImage(textLayer);
+        textGraphics.ScaleTransform(samplingScale, samplingScale);
+        textGraphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
         var text = remainingPercent is null ? "--" : $"{remainingPercent}%";
-        using var font = new Font("Segoe UI", 10f, FontStyle.Bold, GraphicsUnit.Pixel);
+        using var font = new Font("Segoe UI Semibold", 11f, FontStyle.Regular, GraphicsUnit.Pixel);
         var shadowColor = color.GetBrightness() < 0.45f
-            ? Color.FromArgb(190, 255, 255, 255)
-            : Color.FromArgb(190, 0, 0, 0);
+            ? Color.FromArgb(150, 255, 255, 255)
+            : Color.FromArgb(150, 0, 0, 0);
         using var shadowBrush = new SolidBrush(shadowColor);
         using var textBrush = new SolidBrush(color);
         using var format = new StringFormat
@@ -1219,9 +1227,14 @@ internal sealed class TaskbarWidgetForm : Form
             Alignment = StringAlignment.Center,
             LineAlignment = StringAlignment.Center
         };
-        var textBounds = new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height);
-        graphics.DrawString(text, font, shadowBrush, new RectangleF(textBounds.X + 1, textBounds.Y + 1, textBounds.Width, textBounds.Height), format);
-        graphics.DrawString(text, font, textBrush, textBounds, format);
+        var textBounds = new RectangleF(0, 0, bounds.Width, bounds.Height);
+        textGraphics.DrawString(text, font, shadowBrush, new RectangleF(0.5f, 0.5f, bounds.Width, bounds.Height), format);
+        textGraphics.DrawString(text, font, textBrush, textBounds, format);
+        var state = graphics.Save();
+        graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        graphics.DrawImage(textLayer, bounds, 0, 0, textLayer.Width, textLayer.Height, GraphicsUnit.Pixel);
+        graphics.Restore(state);
     }
 
     private void OnDragStart(object? sender, MouseEventArgs eventArgs)

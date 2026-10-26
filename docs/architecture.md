@@ -268,6 +268,14 @@ Labels, percentages, and activity counts use pixel font sizes matching the drawn
 geometry, so a high-DPI graphics surface cannot enlarge text independently of
 the batteries and icons. Preview rendering accepts an explicit surface DPI for
 regression checks from 96 through 288 DPI.
+Battery percentages render Segoe UI Semibold at an 11-pixel size into a 4×
+transparent premultiplied-alpha layer, then downsample with high-quality bicubic
+interpolation. Grayscale antialiasing avoids ClearType color fringes on the
+transparent taskbar; a half-pixel contrast shadow avoids the heavy offset edge
+of the former bold text. The same renderer handles centered and external
+percentages. `--export-screenshots` includes `bar-text-preview.png` with synthetic
+43%/45% Neon bars at 1×, 1.25×, 1.5×, and 2× render scales and all three positions.
+These static examples do not establish manual display or Windows scaling tests.
 
 This design intentionally avoids DLL injection and Explorer patching. Out-of-context
 foreground and window-location accessibility event hooks restore z-order after

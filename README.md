@@ -92,6 +92,10 @@ dotnet publish --configuration Release --runtime win-x64 `
 
 The top battery is the 5-hour window; the bottom battery is the weekly window.
 Battery width and color both represent the percentage remaining.
+Percentages use smooth Segoe UI Semibold text with a subtle contrast shadow,
+whether centered in the battery or placed beside it.
+
+![Static synthetic percentage previews at 1×, 1.25×, 1.5×, and 2× render scales, not manual desktop verification](docs/images/bar-text-preview.png)
 
 Right-click either the taskbar widget or notification-area icon:
 
