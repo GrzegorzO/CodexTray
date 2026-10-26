@@ -70,6 +70,10 @@ All notable changes are documented here. This project follows
 
 ### Fixed
 
+- Use per-pixel alpha for the taskbar widget so finished icons and badges fade
+  uniformly into the actual taskbar at 40% opacity, preserving their original
+  colors instead of blending toward a black transparency key. Static previews
+  use the same alpha surface, including dark/light background comparisons.
 - Keep custom report dates ordered when either endpoint crosses the other, and
   preserve the custom range while visiting quota presets. The custom summary
   shows the same inclusive days as the date controls rather than the following

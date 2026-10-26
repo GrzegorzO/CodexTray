@@ -131,7 +131,7 @@ internal static class AgentIndicatorRenderer
     private static void DrawFinishedIcon(Graphics graphics, RectangleF icon, LoadingIconStyle style,
         Color? color, ProjectMarker? marker, Color markerColor)
     {
-        // Fade the whole rendered slot, including white details and the badge.
+        // Fade the complete slot uniformly, preserving its original RGB colors.
         // Render at the target scale to retain sharp vectors on high-DPI surfaces.
         using var transform = graphics.Transform;
         var elements = transform.Elements;

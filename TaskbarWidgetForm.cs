@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
@@ -56,7 +57,6 @@ internal sealed class TaskbarWidgetForm : Form
     private const int ExternalPercentageWidth = 38;
     private const int StaticLabelWidth = 25;
     private const int CountdownLabelWidth = 56;
-    private static readonly Color TransparentSurface = Color.FromArgb(1, 0, 1);
     private readonly ToolTip _tooltip = new();
     private readonly System.Windows.Forms.Timer _countdownTimer;
     private readonly System.Windows.Forms.Timer _animationTimer;
@@ -131,8 +131,6 @@ internal sealed class TaskbarWidgetForm : Form
         _tooltip.AutoPopDelay = 10_000;
         _tooltip.ShowAlways = true;
         AutoScaleMode = AutoScaleMode.Dpi;
-        BackColor = TransparentSurface;
-        TransparencyKey = TransparentSurface;
         ClientSize = new Size(GetDesiredWidth(ShowLabels, ShowPercentages, LabelMode, PercentageSide), 42);
         ContextMenuStrip = menu;
         FormBorderStyle = FormBorderStyle.None;
@@ -174,14 +172,20 @@ internal sealed class TaskbarWidgetForm : Form
         _countdownTimer.Tick += (_, _) => RefreshCountdownIfChanged();
         _countdownTimer.Start();
         _animationTimer = new System.Windows.Forms.Timer { Interval = 50 };
-        // Color-key layered windows need a complete buffered frame. Partial
-        // presents can expose an empty surface while another monitor plays video.
+        // Present complete alpha frames, including when another monitor plays video.
         _animationTimer.Tick += (_, _) => InvalidateAnimationFrame();
         _tooltipTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _tooltipTimer.Tick += (_, _) => UpdateTooltip();
     }
 
-    internal void InvalidateAnimationFrame() => Invalidate();
+    internal void InvalidateAnimationFrame() => InvalidateFrame();
+
+    private void InvalidateFrame()
+    {
+        Invalidate();
+        // Per-pixel layered windows do not rely on WM_PAINT to present changes.
+        if (Visible && IsHandleCreated) { PresentFrame(); }
+    }
 
     internal void SetWorkingAgentCount(int count)
     {
@@ -243,14 +247,7 @@ internal sealed class TaskbarWidgetForm : Form
         UpdateWidth(previousLeftInset);
         UpdateTooltip();
         UpdateAnimation();
-        Invalidate();
-        if (Visible)
-        {
-            // Resizing a color-key layered window exposes an unpainted strip.
-            // Present the full buffered frame now, before the message loop or
-            // animation timer can leave that strip visible as a dark rectangle.
-            Update();
-        }
+        InvalidateFrame();
     }
 
     private void UpdateWidth(int? previousLeftInset = null)
@@ -322,6 +319,10 @@ internal sealed class TaskbarWidgetForm : Form
         {
             UpdateAnimation();
         }
+        if (Visible)
+        {
+            InvalidateFrame();
+        }
     }
 
     protected override bool ShowWithoutActivation => true;
@@ -332,8 +333,9 @@ internal sealed class TaskbarWidgetForm : Form
         {
             const int WsExToolWindow = 0x00000080;
             const int WsExNoActivate = 0x08000000;
+            const int WsExLayered = 0x00080000;
             var parameters = base.CreateParams;
-            parameters.ExStyle |= WsExToolWindow | WsExNoActivate;
+            parameters.ExStyle |= WsExToolWindow | WsExNoActivate | WsExLayered;
             return parameters;
         }
     }
@@ -350,7 +352,7 @@ internal sealed class TaskbarWidgetForm : Form
         _errorMessage = null;
         _lastCountdownLabels = CurrentCountdownLabels();
         UpdateTooltip();
-        Invalidate();
+        InvalidateFrame();
     }
 
     public void SetError(string message)
@@ -363,7 +365,7 @@ internal sealed class TaskbarWidgetForm : Form
         _isError = true;
         _errorMessage = message;
         UpdateTooltip();
-        Invalidate();
+        InvalidateFrame();
     }
 
     public void ApplyDisplaySettings(
@@ -388,7 +390,7 @@ internal sealed class TaskbarWidgetForm : Form
         PercentageSide = percentagePosition;
         UpdateWidth();
         _lastCountdownLabels = CurrentCountdownLabels();
-        Invalidate();
+        InvalidateFrame();
     }
 
     public void PlaceBesideWeather()
@@ -467,7 +469,7 @@ internal sealed class TaskbarWidgetForm : Form
         }
 
         // Inspect covering top-level windows above this monitor's taskbar.
-        // Pixel hit tests can hit our own animated, color-keyed window and feed
+        // Pixel hit tests can hit our own animated, layered window and feed
         // its current frame back into the visibility decision.
         var covered = false;
         EnumWindows((window, parameter) =>
@@ -572,7 +574,7 @@ internal sealed class TaskbarWidgetForm : Form
         }
 
         _lastCountdownLabels = labels;
-        Invalidate();
+        InvalidateFrame();
     }
 
     private (string FiveHour, string Weekly) CurrentCountdownLabels()
@@ -584,20 +586,46 @@ internal sealed class TaskbarWidgetForm : Form
     protected override void OnPaint(PaintEventArgs eventArgs)
     {
         base.OnPaint(eventArgs);
-        DrawWidget(eventArgs.Graphics);
+        PresentFrame();
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs eventArgs)
+    {
+        // UpdateLayeredWindow supplies every pixel; GDI background erasure is unused.
+    }
+
+    internal void PresentFrame()
+    {
+        using var surface = RenderSurface(dpi: DeviceDpi);
+        LayeredWidgetSurface.Present(Handle, surface);
+    }
+
+    internal Bitmap RenderSurface(float scale = 1f, float dpi = 96f)
+    {
+        var surface = new Bitmap(
+            (int)Math.Ceiling(Width * scale),
+            (int)Math.Ceiling(Height * scale), PixelFormat.Format32bppPArgb);
+        surface.SetResolution(dpi, dpi);
+        using (var surfaceGraphics = Graphics.FromImage(surface))
+        {
+            surfaceGraphics.Clear(Color.Transparent);
+            surfaceGraphics.ScaleTransform(scale, scale);
+            surfaceGraphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            DrawWidget(surfaceGraphics);
+        }
+        return surface;
     }
 
     internal Bitmap RenderPreview(Color background, float scale = 2f, float dpi = 96f)
     {
+        using var surface = RenderSurface(scale, dpi);
         var bitmap = new Bitmap(
             (int)Math.Ceiling(Width * scale),
             (int)Math.Ceiling(Height * scale));
         bitmap.SetResolution(dpi, dpi);
         using var graphics = Graphics.FromImage(bitmap);
         graphics.Clear(background);
-        graphics.ScaleTransform(scale, scale);
-        graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-        DrawWidget(graphics);
+        graphics.DrawImageUnscaled(surface, 0, 0);
         return bitmap;
     }
 

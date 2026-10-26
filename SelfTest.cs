@@ -25,7 +25,7 @@ internal static class SelfTest
             VerifyProjectColors();
             VerifyDesktopProjectIcons();
             VerifyAgentIndicator();
-            VerifyAgentPresentationPaint();
+            VerifyAgentPresentationFrame();
             VerifyWorkingTaskNavigation();
             VerifyWorkingTaskTooltip();
             VerifyFinishedTasks();
@@ -129,7 +129,7 @@ internal static class SelfTest
         Rectangle? invalidated = null;
         widget.Invalidated += (_, eventArgs) => invalidated = eventArgs.InvalidRect;
         widget.InvalidateAnimationFrame();
-        Assert(invalidated == widget.ClientRectangle, "animation invalidates a complete buffered frame including batteries");
+        Assert(invalidated == widget.ClientRectangle, "animation invalidates a complete alpha frame including batteries");
 
         static bool Blocks(Rectangle window, Rectangle monitor) =>
             TaskbarVisibility.BlocksTaskbar(window, monitor, true, false, false, false, false);
@@ -1061,7 +1061,7 @@ internal static class SelfTest
         Assert(widget.AgentCounterWidth == 0 && widget.ClientSize.Width == disabledWidth, "disabled counter stays hidden during activity");
     }
 
-    private static void VerifyAgentPresentationPaint()
+    private static void VerifyAgentPresentationFrame()
     {
         using var menu = new ContextMenuStrip();
         var screen = Screen.PrimaryScreen ?? Screen.AllScreens.First();
@@ -1069,8 +1069,6 @@ internal static class SelfTest
         // Exercise a real layered window without putting a test widget on the taskbar.
         widget.Location = new Point(screen.Bounds.Left, screen.Bounds.Top - widget.Height - 100);
         widget.Show();
-        Rectangle? painted = null;
-        widget.Paint += (_, eventArgs) => painted = eventArgs.ClipRectangle;
 
         foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
             foreach (var mode in Enum.GetValues<AgentIndicatorMode>())
@@ -1079,12 +1077,20 @@ internal static class SelfTest
                     widget.ApplyAgentSettings(true, animate, LoadingIconStyle.Robot, side, mode);
                     foreach (var count in new[] { 1, 2, 3, 2, 0 })
                     {
-                        painted = null;
                         widget.SetWorkingAgentCount(count);
-                        Assert(painted == widget.ClientRectangle,
-                            $"{side} {mode} animation={animate} count={count} paints a complete frame before returning");
+                        using var surface = widget.RenderSurface();
+                        Assert(surface.Size == widget.ClientSize,
+                            $"{side} {mode} animation={animate} count={count} renders a complete resized alpha frame");
+                        // Uses the actual native presenter; failures throw. Exercise
+                        // animation, shrinking/growing, and hide/show without a key.
+                        widget.InvalidateAnimationFrame();
+                        widget.PresentFrame();
                     }
                 }
+        widget.Hide();
+        widget.SetWorkingAgentCount(2);
+        widget.Show();
+        widget.PresentFrame();
     }
 
     private static void VerifyFinishedTasks()
@@ -1193,9 +1199,10 @@ internal static class SelfTest
                         var pixel = firstFrame.GetPixel(x, y);
                         visible |= pixel.A > 0;
                         Assert(pixel == nextFrame.GetPixel(x, y), "finished icons and badges stay static in every style and scale");
-                        Assert(pixel.A <= 105, "the complete finished slot is faded, including opaque icon details");
+                        Assert(pixel.A <= 105, "finished icons and badges use uniform 40% opacity");
                     }
                 Assert(visible, "finished icons remain visible");
+                Assert(firstFrame.GetPixel(0, 0).A == 0, "finished slots have no rectangular background");
 
                 Bitmap Render(float phase)
                 {
@@ -1207,6 +1214,36 @@ internal static class SelfTest
                     return bitmap;
                 }
             }
+        foreach (var side in Enum.GetValues<AgentIndicatorPosition>())
+        {
+            widget.ApplyAgentSettings(true, false, LoadingIconStyle.Robot, side, AgentIndicatorMode.RepeatedIcons,
+                useProjectColors: true, showProjectIcons: true);
+            widget.SetWorkingTasks([finished]);
+            using var surface = widget.RenderSurface();
+            var facePoint = new Point(widget.AgentCounterBounds.Left +
+                (int)Math.Round((AgentIndicatorRenderer.IconXFor(0, 1, side) + 8) * AgentIndicatorRenderer.Scale), 22);
+            var fadedFace = surface.GetPixel(facePoint.X, facePoint.Y);
+            Assert(fadedFace.A is >= 99 and <= 105, "the native surface preserves finished face alpha");
+            widget.SetWorkingTasks([first]);
+            using var active = widget.RenderSurface();
+            var activeFace = active.GetPixel(facePoint.X, facePoint.Y);
+            Assert(Math.Abs(fadedFace.R - activeFace.R) <= 3 && Math.Abs(fadedFace.G - activeFace.G) <= 3 &&
+                Math.Abs(fadedFace.B - activeFace.B) <= 3,
+                $"finished faces retain their original RGB without whitening ({side}: {activeFace} -> {fadedFace})");
+            widget.SetWorkingTasks([finished]);
+            foreach (var background in new[] { Color.FromArgb(31, 31, 31), Color.FromArgb(230, 220, 205) })
+            {
+                using var preview = widget.RenderPreview(background, scale: 1);
+                var pixel = preview.GetPixel(facePoint.X, facePoint.Y);
+                var alpha = fadedFace.A / 255d;
+                Assert(Math.Abs(pixel.R - (fadedFace.R * alpha + background.R * (1 - alpha))) <= 2 &&
+                    Math.Abs(pixel.G - (fadedFace.G * alpha + background.G * (1 - alpha))) <= 2 &&
+                    Math.Abs(pixel.B - (fadedFace.B * alpha + background.B * (1 - alpha))) <= 2,
+                    "finished faces blend all channels with the actual background");
+            }
+            Assert(widget.TransparencyKey.IsEmpty, "per-pixel alpha widgets never configure a color key");
+            widget.PresentFrame();
+        }
     }
 
     private static void VerifyWorkingTaskTooltip()

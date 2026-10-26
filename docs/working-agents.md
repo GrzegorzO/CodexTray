@@ -111,7 +111,9 @@ remaining work.
 
 When an observed main turn completes, is interrupted, or releases its writer
 lock, its repeated icon stays in the same slot as a static frame at 40% opacity.
-Its project badge fades too. Hover text shows **Finished** and the frozen turn
+The entire icon and project badge fade uniformly using per-pixel transparency:
+their original colors blend into the actual taskbar behind them, without adding
+white or a black background. Hover text shows **Finished** and the frozen turn
 runtime. A finished-only strip stops its animation timer. The running count and
 **Icon and number** mode exclude finished icons.
 

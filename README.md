@@ -189,9 +189,10 @@ for attribution and history limitations.
 
 The indicator is enabled by default and appears when a compatible local Codex
 session has an in-progress turn. In **One icon per task** mode, finished icons
-remain static at 40% opacity, including their project badges. Click one to open
-its session and dismiss it across all monitors. Opening the chat in Codex also
-clears it when CodexTray observes its local unread flag clear. A new turn in the
+remain static at 40% opacity, including their project badges. Every color keeps
+its original hue and blends into the taskbar behind it using per-pixel transparency.
+Click one to open its session and dismiss it across all monitors. Opening the chat
+in Codex also clears it when CodexTray observes its local unread flag clear. A new turn in the
 same session replaces the old icon with a normal active icon at the outer edge.
 The tooltip says **Finished** and freezes the completed turn's runtime.
 Finished icons include observed completion, interruption, and writer-lock release;
@@ -201,7 +202,7 @@ between polls, click the icon to dismiss it. No Codex read state is modified.
 With no running tasks or retained icons, the indicator releases all its space.
 Open **Display → Working agents** to change its appearance.
 
-![Static synthetic previews of active and faded finished icons](docs/images/finished-agents-gallery.png)
+![Static synthetic previews of normal and transparent finished robots on dark and light backgrounds](docs/images/finished-robots-preview.png)
 
 In **One icon per task** mode, hover an icon or its project badge to see the
 project name and current turn runtime: `42s` below one minute, `2m 15s` through

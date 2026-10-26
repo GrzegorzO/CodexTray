@@ -70,7 +70,7 @@ internal static class ScreenshotExporter
         using var captionFont = new Font("Segoe UI", 9);
         using var text = new SolidBrush(Color.White);
         graphics.DrawString("Finished agents · static synthetic previews", titleFont, text, 18, 12);
-        graphics.DrawString("Green: working frame · purple: finished at 40% opacity · last example: both finished", captionFont, text, 18, 40);
+        graphics.DrawString("Green: working · purple: finished at 40% opacity · per-pixel alpha · static examples", captionFont, text, 18, 40);
         var styles = Enum.GetValues<LoadingIconStyle>();
         for (var index = 0; index <= styles.Length; index++)
         {
@@ -97,6 +97,31 @@ internal static class ScreenshotExporter
             graphics.DrawImageUnscaled(preview, card.X + 10, card.Y + 34);
         }
         gallery.Save(Path.Combine(outputDirectory, "finished-agents-gallery.png"), ImageFormat.Png);
+        using var robotPreview = new Bitmap(840, 170);
+        using var robotGraphics = Graphics.FromImage(robotPreview);
+        robotGraphics.Clear(Color.FromArgb(20, 20, 22));
+        robotGraphics.DrawString("Robot heads · normal / finished pairs · 40% opacity · static synthetic previews", captionFont, text, 18, 10);
+        using var robotSurface = new Bitmap(340, 68, PixelFormat.Format32bppPArgb);
+        using (var surfaceGraphics = Graphics.FromImage(robotSurface))
+        {
+            surfaceGraphics.ScaleTransform(1.6f, 1.6f);
+            var red = ProjectColorMap.ParseColor("red");
+            var blue = AgentIndicatorRenderer.DefaultColor;
+            var green = ProjectColorMap.ParseColor("green");
+            AgentIndicatorRenderer.Draw(surfaceGraphics, new Rectangle(0, 0, 212, 42), 6, LoadingIconStyle.Robot, 0.25f,
+                AgentIndicatorMode.RepeatedIcons, synchronizeAnimations: true,
+                projectColors: [red, red, blue, blue, green, green], finishedTasks: [false, true, false, true, false, true]);
+        }
+        for (var index = 0; index < 2; index++)
+        {
+            var card = new Rectangle(12 + index * 414, 36, 402, 122);
+            using var background = new SolidBrush(index == 0 ? TaskbarColor : Color.FromArgb(230, 220, 205));
+            using var foreground = new SolidBrush(index == 0 ? Color.White : Color.Black);
+            robotGraphics.FillRectangle(background, card);
+            robotGraphics.DrawString(index == 0 ? "Dark background" : "Light background", captionFont, foreground, card.X + 12, card.Y + 10);
+            robotGraphics.DrawImageUnscaled(robotSurface, card.X + 28, card.Y + 40);
+        }
+        robotPreview.Save(Path.Combine(outputDirectory, "finished-robots-preview.png"), ImageFormat.Png);
     }
 
     private static void RenderTaskTooltipGallery(string outputDirectory, UsageSnapshot snapshot)

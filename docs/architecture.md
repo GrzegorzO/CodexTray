@@ -64,9 +64,9 @@ head with blinking eyes, a glowing antenna, and a gentle bob over a slower
 3.6-second cycle. Widgets reserve a separate strip at the selected outer edge
 and collapse it completely when there are no displayed slots. Aggregate mode
 counts only running tasks; repeated mode also reserves retained finished slots.
-The animation timer invalidates the complete
-buffered window while visible and active; the reduced-motion setting draws a
-static frame. Activity layout changes synchronously paint a complete buffered
+The animation timer presents a complete per-pixel alpha
+frame while visible and active; the reduced-motion setting draws a
+static frame. Activity layout changes synchronously present a complete
 frame after resizing so newly exposed space is transparent immediately, even
 with animation disabled. Counter visibility, style, motion, and side use the
 same per-user registry settings as the existing display options.
@@ -101,8 +101,17 @@ within a still-present identity/host scope. Missing or unsupported data and
 removed scopes do not acknowledge tasks; transitions between polls may be missed.
 No read-state writes or credential reads are involved. Finished slots render a
 fixed frame and badge into a transparent layer at the target scale before
-applying opacity to the whole layer, including white details. Finished-only
-widgets stop the animation timer. `ProjectColorReader`
+applying 40% opacity to the whole layer, including white details. RGB colors
+are unchanged. The widget renders into a transparent premultiplied-BGRA surface;
+`LayeredWidgetSurface` copies it to a top-down 32-bit DIB and presents it through
+[`UpdateLayeredWindow` with `ULW_ALPHA`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-updatelayeredwindow).
+No `TransparencyKey` or window-wide opacity is configured, so finished pixels
+blend into the actual taskbar instead of a nearly black key color. Each native
+presentation releases its DIB and memory DC, including failure paths. State,
+layout, animation, and visibility changes present complete frames directly;
+painting can also refresh them. Alpha-zero pixels remain click-through. Static
+widget previews composite the same transparent surface over synthetic backgrounds.
+Finished-only widgets stop the animation timer. `ProjectColorReader`
 reads `.codex-global-state.json` with shared read access and caches project
 names, colors, markers, assignments, roots, hints, and local unread-ID sets.
 File timestamp and length changes trigger reloads; partial writes preserve the
@@ -268,8 +277,8 @@ that taskbar on its own monitor, ignoring the widget process and DWM-cloaked or
 minimized windows. It does not hit-test animated transparent pixels or use a
 different monitor's foreground application to decide visibility. Windows shell
 surfaces such as Start and Search are recognized separately because they leave
-the taskbar visible. Animated frames repaint the entire double-buffered window
-to keep the batteries and icons together under fullscreen-video composition.
+the taskbar visible. Animated frames present the entire alpha surface to keep
+the batteries and icons together under fullscreen-video composition.
 
 ## Automatic startup
 
